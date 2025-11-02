@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 calendar_store = {}
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Create a new calendar appointment or meeting"
 )
 async def calendar_tool(
@@ -115,7 +115,7 @@ async def calendar_tool(
         return "I encountered an error while creating the appointment."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Check calendar availability for a specific date and time"
 )
 async def check_availability(
@@ -190,7 +190,7 @@ async def check_availability(
         return "I encountered an error while checking availability."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="List upcoming calendar appointments"
 )
 async def list_appointments(
@@ -239,7 +239,7 @@ async def list_appointments(
         return "I encountered an error while listing appointments."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Cancel or delete a calendar appointment"
 )
 async def cancel_appointment(
@@ -302,7 +302,7 @@ async def cancel_appointment(
         return "I encountered an error while cancelling the appointment."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Reschedule an existing appointment to a new date/time"
 )
 async def reschedule_appointment(

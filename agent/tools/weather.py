@@ -11,7 +11,7 @@ from livekit.agents import llm
 
 logger = logging.getLogger(__name__)
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Get current weather information for a specific location"
 )
 async def weather_tool(
@@ -77,7 +77,7 @@ async def weather_tool(
         return "I encountered an error while checking the weather. Please try again."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Get weather forecast for the next few days"
 )
 async def weather_forecast(
@@ -145,7 +145,7 @@ async def weather_forecast(
         return "I encountered an error while getting the weather forecast."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Check if weather conditions are suitable for an outdoor activity"
 )
 async def check_weather_conditions(

@@ -82,35 +82,46 @@ class DatabaseConnection:
 db = DatabaseConnection()
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Query database for customer, order, product, or appointment information"
 )
 async def database_query(
     query_type: str,
-    search_term: Optional[str] = None,
-    filters: Optional[Dict[str, Any]] = None
+    search_term: str = "",
+    filters: str = "{}"
 ) -> str:
     """
     Query the database for information
 
     Args:
         query_type: Type of query (customers, orders, products, appointments)
-        search_term: Optional search term to filter results
-        filters: Optional dictionary of filters (e.g., {"status": "active"})
+        search_term: Optional search term to filter results (empty string if not provided)
+        filters: Optional JSON string of filters (e.g., '{"status": "active"}'), defaults to '{}'
 
     Returns:
         Query results as a natural language response
     """
+    import json
     try:
+        # Parse filters from JSON string
+        filters_dict = None
+        if filters and filters != "{}":
+            try:
+                filters_dict = json.loads(filters)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid JSON in filters: {filters}")
+        
+        search = search_term if search_term else None
+        
         # For demo, use in-memory database
         if db.connection is None:
-            return await query_demo_database(query_type, search_term, filters)
+            return await query_demo_database(query_type, search, filters_dict)
 
         # Real database queries would go here
         if db.db_type == "postgresql":
-            return await query_postgresql(query_type, search_term, filters)
+            return await query_postgresql(query_type, search, filters_dict)
         elif db.db_type == "sqlite":
-            return await query_sqlite(query_type, search_term, filters)
+            return await query_sqlite(query_type, search, filters_dict)
 
     except Exception as e:
         logger.error(f"Database query error: {e}")
@@ -166,7 +177,7 @@ async def query_demo_database(
         return "I encountered an error while searching the database."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Get detailed information about a specific customer by name or ID"
 )
 async def get_customer_info(
@@ -221,7 +232,7 @@ async def get_customer_info(
         return "I encountered an error while retrieving customer information."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Check product inventory and availability"
 )
 async def check_inventory(
@@ -258,7 +269,7 @@ async def check_inventory(
         return "I encountered an error while checking inventory."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Add or update information in the database"
 )
 async def update_database(

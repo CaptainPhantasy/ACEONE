@@ -44,3 +44,6 @@ python-dateutil>=2.8.0
 
 # JSON handling
 jsonschema>=4.0.0
+
+# Vector similarity calculations
+numpy>=1.24.0

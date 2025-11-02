@@ -1,305 +1,126 @@
-# ClaudeVoice 🎙️
+# ACE - Indianapolis Pickleball Club Voice Agent
 
-A production-ready voice AI agent with telephony integration built on LiveKit's framework. ClaudeVoice enables natural voice conversations through phone calls with advanced tool-calling capabilities including weather information, calendar management, database queries, and voicemail detection.
+Voice agent for answering phone calls to Indianapolis Pickleball Club. Embodies Chris Sears' authentic voice and uses RAG for accurate knowledge retrieval.
 
-## 🌟 Features
+**⚠️ CURRENT STATUS:** See `STATUS.md` for latest issues and fixes needed.
 
-- **Voice AI Agent**: STT-LLM-TTS pipeline with natural conversation flow
-- **Telephony Integration**: Full SIP trunk support for inbound/outbound calls
-- **Tool Calling**: Weather, calendar, database, and voicemail detection
-- **Production Ready**: Docker deployment, monitoring, and comprehensive testing
-- **Scalable**: Handles 100+ concurrent calls with auto-scaling
-- **Low Latency**: Sub-500ms response times with noise cancellation
+## ✅ Working Setup
 
-## 🏗️ Architecture
-
-```
-┌─────────────────┐     ┌──────────────┐     ┌─────────────────┐
-│   Phone Call    │────▶│  SIP Trunk   │────▶│    Webhook      │
-└─────────────────┘     └──────────────┘     └─────────────────┘
-                                                       │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │  LiveKit Room   │
-                                              └─────────────────┘
-                                                       │
-                                                       ▼
-                                              ┌─────────────────┐
-                                              │  Voice Agent    │
-                                              │  (STT-LLM-TTS)  │
-                                              └─────────────────┘
-```
-
-## 📋 Prerequisites
-
-- Python ≥3.9
-- Node.js ≥20
-- Docker & Docker Compose
-- LiveKit Cloud account
-- OpenAI API key (for GPT-4, Whisper STT, and TTS)
+- **Agent Framework**: LiveKit Agents (Python)
+- **STT**: OpenAI Whisper
+- **LLM**: OpenAI GPT-4 Turbo
+- **TTS**: OpenAI TTS
+- **VAD**: Silero VAD
+- **Testing**: LiveKit Playground (auto-dispatch)
 
 ## 🚀 Quick Start
 
-### 1. Clone the repository
+### 1. Environment Setup
 
 ```bash
-git clone https://github.com/yourusername/claudevoice.git
-cd claudevoice
-```
-
-### 2. Set up environment variables
-
-```bash
-cp .env.example .env.local
-# Edit .env.local with your API keys
-```
-
-### 3. Install dependencies
-
-```bash
-# Python agent
 cd agent
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-
-# Webhook
-cd ../webhook
-npm install
 ```
 
-### 4. Run locally
+### 2. Configure Environment
+
+Create `.env.local` in project root:
 
 ```bash
-# Start agent in dev mode
+LIVEKIT_URL=wss://your-project.livekit.cloud
+LIVEKIT_API_KEY=your_api_key
+LIVEKIT_API_SECRET=your_api_secret
+OPENAI_API_KEY=your_openai_key
+AGENT_NAME=sage-assistant
+```
+
+### 3. Run Agent
+
+```bash
 cd agent
+source venv/bin/activate
 python main.py dev
-
-# Start webhook server
-cd ../webhook
-npm run dev
 ```
 
-### 5. Test with LiveKit Playground
+Agent will register and wait for connections.
 
-Access the playground URL provided by the agent and test voice interactions.
+### 4. Test with LiveKit Playground
 
-## 🔧 Configuration
+1. Visit: https://agents-playground.livekit.io
+2. Enter your LiveKit credentials (URL, API Key, API Secret)
+3. Set Agent Name: `sage-assistant`
+4. Click "Connect"
+5. Agent auto-dispatches when you join
+6. Start speaking - agent responds with voice
 
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `LIVEKIT_URL` | LiveKit Cloud WebSocket URL | Yes |
-| `LIVEKIT_API_KEY` | LiveKit API key | Yes |
-| `LIVEKIT_API_SECRET` | LiveKit API secret | Yes |
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4, Whisper STT, and TTS | Yes |
-| `AGENT_NAME` | Agent identifier | No |
-| `WEBHOOK_SECRET` | Webhook signature secret | No |
-
-### SIP Configuration
-
-1. Navigate to LiveKit Cloud Dashboard
-2. Go to SIP section
-3. Create SIP Trunk
-4. Set webhook URL: `https://your-domain/api/sip/inbound`
-5. Configure dispatch rule (see `IMPLEMENTATION_GUIDE.md`)
-
-## 🛠️ Development
-
-### Project Structure
+## 📁 Project Structure
 
 ```
-ClaudeVoice/
-├── agent/                  # Python voice agent
-│   ├── main.py            # Agent entrypoint
-│   ├── tools/             # Tool implementations
-│   └── requirements.txt
-├── webhook/               # SIP webhook (Next.js)
-│   └── app/api/sip/
-├── tests/                 # Test suites
-├── docker/                # Container configs
-├── scripts/               # Automation scripts
-└── docs/                  # Documentation
+agent/
+  main.py          # Entry point - AgentSession setup
+  config.py        # Configuration from .env
+  tools/           # Function tools (weather, calendar, database)
+    weather.py
+    calendar.py
+    database.py
+    voicemail.py
 ```
 
-### Running Tests
+## 🔧 Key Implementation Details
 
-```bash
-# Unit tests
-pytest tests/test_agent.py -v
-
-# Integration tests
-pytest tests/integration/ -v
-
-# End-to-end tests
-./tests/e2e/test_call_flow.sh
-```
-
-### Tool Development
-
-Add new tools in `agent/tools/`:
+### Agent Pattern
 
 ```python
-from livekit.agents import llm
-
-@llm.ai_callable(
-    description="Your tool description"
+# Agent defines behavior (instructions + tools)
+voice_agent = Agent(
+    instructions=system_instructions,
+    tools=tools_list,
 )
-async def your_tool(param1: str, param2: int) -> str:
-    # Tool implementation
-    return "Result"
+
+# AgentSession handles STT/LLM/TTS/VAD
+session = AgentSession(
+    stt=openai.STT(...),
+    llm=openai.LLM(...),
+    tts=openai.TTS(...),
+    vad=silero.VAD.load(...),
+)
+
+# Start session with agent and room
+await session.start(voice_agent, room=ctx.room)
 ```
 
-Register in `main.py`:
+### Worker Registration
 
-```python
-assistant.llm.register_tool(your_tool)
-```
+Agent registers with LiveKit Cloud using `agent_name` from config:
+- Set in `.env.local` as `AGENT_NAME=sage-assistant`
+- Must match the name used in Playground or dispatch
 
-## 🚢 Deployment
+### Tool Schema Note
 
-### Docker Deployment
+Tools use `@llm.function_tool` decorator. For complex types, use JSON strings:
+- `filters: str = "{}"` instead of `filters: Optional[Dict] = None`
+- Parse JSON inside the function
 
-```bash
-# Build and run with Docker Compose
-docker-compose up -d
+## 🐛 Troubleshooting
 
-# Or deploy individually
-docker build -f docker/Dockerfile.agent -t claudevoice-agent .
-docker run --env-file .env.production claudevoice-agent
-```
+**Agent not responding:**
+- Check logs: `tail -f /tmp/agent.log`
+- Verify worker registered: Look for "registered worker" in logs
+- Ensure agent name matches in Playground
 
-### Cloud Deployment
+**Schema errors:**
+- Tool parameters must use simple types or JSON strings
+- Avoid `Optional[Dict]` - use `str` with default `"{}"`
 
-```bash
-# Deploy to production
-./scripts/deploy.sh production
+**Connection issues:**
+- Verify `.env.local` credentials
+- Check LiveKit Cloud dashboard for worker status
 
-# Deploy to staging
-./scripts/deploy.sh staging
-```
+## 📝 Notes
 
-### Vercel Webhook Deployment
-
-```bash
-cd webhook
-vercel --prod
-```
-
-## 📊 Monitoring
-
-### Metrics Dashboard
-
-- Grafana: http://localhost:3001 (admin/admin)
-- Prometheus: http://localhost:9090
-
-### Key Metrics
-
-- Call volume and duration
-- Response latency
-- Tool execution success rate
-- Error rates and types
-- Concurrent call count
-
-### Logging
-
-```python
-import logging
-
-logger = logging.getLogger(__name__)
-logger.info(f"Processing call from {phone_number}")
-```
-
-## 🧪 Testing
-
-### Test Coverage
-
-- Unit tests: 85%+ coverage
-- Integration tests: Major workflows
-- E2E tests: Complete call flows
-- Performance tests: Load and latency
-
-### Running All Tests
-
-```bash
-# Run complete test suite
-make test
-
-# Or manually
-pytest tests/ -v --cov=agent
-```
-
-## 📈 Performance
-
-### Benchmarks
-
-- **Response Time**: < 500ms average
-- **Concurrent Calls**: 100+ supported
-- **Tool Execution**: < 2s average
-- **Availability**: 99.9% uptime target
-
-### Optimization Tips
-
-1. Use noise cancellation for telephony
-2. Implement caching for frequent queries
-3. Use connection pooling for databases
-4. Monitor and adjust worker scaling
-
-## 🔒 Security
-
-### Best Practices
-
-- Never commit API keys
-- Use webhook signatures
-- Implement rate limiting
-- Validate all inputs
-- Monitor for anomalies
-
-### Environment Security
-
-```bash
-# Generate webhook secret
-openssl rand -hex 32
-
-# Encrypt sensitive data
-ansible-vault encrypt .env.production
-```
-
-## 📚 Documentation
-
-- [Project Analysis](PROJECT_ANALYSIS.md) - Architecture overview
-- [Implementation Guide](IMPLEMENTATION_GUIDE.md) - Step-by-step setup
-- [API Documentation](docs/API.md) - Tool and webhook APIs
-- [Deployment Guide](docs/DEPLOYMENT.md) - Production deployment
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit changes (`git commit -m 'Add amazing feature'`)
-4. Push to branch (`git push origin feature/amazing-feature`)
-5. Open Pull Request
-
-## 📝 License
-
-This project is licensed under the MIT License - see [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- [LiveKit](https://livekit.io) - Real-time communication infrastructure
-- [OpenAI](https://openai.com) - GPT-4 language model, Whisper STT, and TTS services
-
-## 📞 Support
-
-- Documentation: [docs.claudevoice.ai](https://docs.claudevoice.ai)
-- Issues: [GitHub Issues](https://github.com/yourusername/claudevoice/issues)
-- Discord: [Join our community](https://discord.gg/claudevoice)
-
-## 🚦 Status
-
-![Build Status](https://img.shields.io/github/workflow/status/yourusername/claudevoice/CI)
-![License](https://img.shields.io/github/license/yourusername/claudevoice)
-![Version](https://img.shields.io/github/v/release/yourusername/claudevoice)
-
----
-
-Built with ❤️ using LiveKit Agents Framework
+- Uses LiveKit Playground for testing (recommended - auto-dispatches)
+- Custom test GUI available in `test_gui/` (requires manual dispatch)
+- Agent runs in dev mode: `python main.py dev`
+- Production mode requires different setup (not covered here)

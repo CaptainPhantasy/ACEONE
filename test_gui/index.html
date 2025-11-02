@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClaudeVoice Test Client</title>
+    <!-- Try multiple CDN options for LiveKit SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@latest/dist/livekit-client.umd.min.js"></script>
+    <script>
+        // Map different global variable names to LiveKit
+        window.addEventListener('load', () => {
+            // Check various possible global names
+            if (typeof LivekitClient !== 'undefined') {
+                window.LiveKit = LivekitClient;
+                console.log('LiveKit SDK loaded as LivekitClient');
+            } else if (typeof LiveKit !== 'undefined') {
+                console.log('LiveKit SDK loaded as LiveKit');
+            } else if (typeof livekit !== 'undefined') {
+                window.LiveKit = livekit;
+                console.log('LiveKit SDK loaded as livekit');
+            } else {
+                console.error('LiveKit SDK failed to load. Available globals:', Object.keys(window).filter(k => k.toLowerCase().includes('livekit')));
+            }
+        });
+    </script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #connect {
+            background: #4CAF50;
+            color: white;
+        }
+        #connect:hover:not(:disabled) {
+            background: #45a049;
+        }
+        #disconnect {
+            background: #f44336;
+            color: white;
+        }
+        #disconnect:hover:not(:disabled) {
+            background: #da190b;
+        }
+        .input-group {
+            margin: 15px 0;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+            color: #555;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        #status {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 15px 0;
+            font-weight: 600;
+        }
+        .status-disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status-connecting {
+            background: #fff3e0;
+            color: #e65100;
+        }
+        .status-connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        #transcript {
+            border: 1px solid #ddd;
+            padding: 15px;
+            min-height: 200px;
+            max-height: 400px;
+            overflow-y: auto;
+            background: #fafafa;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message.user {
+            background: #e3f2fd;
+            border-left: 3px solid #2196F3;
+        }
+        .message.agent {
+            background: #f1f8e9;
+            border-left: 3px solid #8BC34A;
+        }
+        .message.system {
+            background: #fafafa;
+            border-left: 3px solid #9e9e9e;
+            font-size: 12px;
+            color: #666;
+        }
+        .audio-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        .audio-indicator.speaking {
+            background: #4CAF50;
+            animation: pulse 1s infinite;
+        }
+        .audio-indicator.silent {
+            background: #ccc;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .info-box {
+            background: #e3f2fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            border-left: 4px solid #2196F3;
+        }
+        .info-box h3 {
+            margin-top: 0;
+            color: #1976D2;
+        }
+        .info-box code {
+            background: rgba(0,0,0,0.1);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎙️ ClaudeVoice Test Client</h1>
+        
+        <div class="info-box">
+            <h3>Quick Start</h3>
+            <ol>
+                <li>Start your agent: <code>./run.sh dev</code></li>
+                <li>Generate a token using the script below</li>
+                <li>Paste the token and room name</li>
+                <li>Click "Connect" and allow microphone access</li>
+            </ol>
+        </div>
+
+        <div class="controls">
+            <button id="connect">Connect</button>
+            <button id="disconnect" disabled>Disconnect</button>
+        </div>
+
+        <div class="input-group">
+            <label for="url">LiveKit URL:</label>
+            <input type="text" id="url" placeholder="wss://your-livekit-server.com" value="">
+        </div>
+
+        <div class="input-group">
+            <label for="room">Room Name:</label>
+            <input type="text" id="room" value="test-room" placeholder="test-room">
+        </div>
+
+        <div class="input-group">
+            <label for="token">Access Token:</label>
+            <input type="text" id="token" placeholder="Paste your JWT token here" style="font-family: monospace; font-size: 12px;">
+        </div>
+
+        <div>
+            <h3>Status: <span id="status" class="status-disconnected">Disconnected</span></h3>
+            <div>
+                <span class="audio-indicator silent" id="audioIndicator"></span>
+                <span id="audioStatus">No audio activity</span>
+            </div>
+        </div>
+
+        <div>
+            <h3>Conversation Transcript</h3>
+            <div id="transcript"></div>
+        </div>
+    </div>
+
+    <script src="test_client.js"></script>
+</body>
+</html>
+

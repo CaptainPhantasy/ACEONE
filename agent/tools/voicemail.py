@@ -7,7 +7,6 @@ import logging
 import asyncio
 from typing import Optional, Tuple
 from livekit.agents import llm
-from livekit.agents.pipeline import VoicePipelineAgent
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +49,7 @@ HUMAN_GREETING_PATTERNS = [
 ]
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Detect if the call has reached a voicemail system"
 )
 async def detect_voicemail(
@@ -130,7 +129,7 @@ async def detect_voicemail(
         return "Unable to determine if this is a voicemail. Proceeding with caution."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Leave a voicemail message on the detected voicemail system"
 )
 async def leave_voicemail_message(
@@ -174,7 +173,7 @@ async def leave_voicemail_message(
         return f"This is {caller_name}. {message}. Please call back at {callback_number}."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Analyze voicemail greeting to extract business information"
 )
 async def analyze_voicemail_greeting(
@@ -255,7 +254,7 @@ async def analyze_voicemail_greeting(
         return "Unable to extract specific information from voicemail greeting."
 
 
-@llm.ai_callable(
+@llm.function_tool(
     description="Wait for the beep before leaving a voicemail message"
 )
 async def wait_for_beep(

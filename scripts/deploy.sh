@@ -62,8 +62,8 @@ build_images() {
     log_info "Building Docker images..."
 
     # Build agent image
-    docker build -f docker/Dockerfile.agent -t $AGENT_IMAGE:latest .
-    docker tag $AGENT_IMAGE:latest $AGENT_IMAGE:$(git rev-parse --short HEAD)
+    docker build -f docker/Dockerfile.agent -t "${AGENT_IMAGE}:latest" .
+    docker tag "${AGENT_IMAGE}:latest" "${AGENT_IMAGE}:$(git rev-parse --short HEAD)"
 
     log_info "Docker images built successfully"
 }
@@ -75,7 +75,7 @@ run_tests() {
     # Run Python tests
     docker run --rm \
         --env-file .env.$DEPLOY_ENV \
-        $AGENT_IMAGE:latest \
+        "${AGENT_IMAGE}:latest" \
         python -m pytest tests/ -v
 
     # Run E2E tests
@@ -90,12 +90,12 @@ deploy_agent() {
     log_info "Deploying agent to Cloud Run..."
 
     # Push to GCR
-    docker push $AGENT_IMAGE:latest
-    docker push $AGENT_IMAGE:$(git rev-parse --short HEAD)
+    docker push "${AGENT_IMAGE}:latest"
+    docker push "${AGENT_IMAGE}:$(git rev-parse --short HEAD)"
 
     # Deploy to Cloud Run
     gcloud run deploy claudevoice-agent \
-        --image $AGENT_IMAGE:latest \
+        --image "${AGENT_IMAGE}:latest" \
         --platform managed \
         --region us-central1 \
         --allow-unauthenticated \

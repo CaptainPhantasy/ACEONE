@@ -4,8 +4,6 @@
 
 LOG_FILE="/tmp/agent_new.log"
 AGENT_LOG="/tmp/agent.log"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # Colors
 RED='\033[0;31m'
@@ -33,12 +31,12 @@ echo -e "${YELLOW}Press Ctrl+C to stop monitoring${RESET}"
 echo ""
 
 # Check agent process
-AGENT_PID=$(pgrep -f "python.*main.py.*dev" | head -1)
+AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
 if [ -n "$AGENT_PID" ]; then
     echo -e "${GREEN}✅ Agent running (PID: $AGENT_PID)${RESET}"
 else
     echo -e "${RED}⚠️  Agent process not found${RESET}"
-    echo -e "${YELLOW}   Start with: cd agent && source venv/bin/activate && python main.py dev${RESET}"
+    echo -e "${YELLOW}   Start with: uv run --frozen python -m agent.main dev${RESET}"
 fi
 echo ""
 
@@ -143,7 +141,7 @@ while true; do
         fi
         
         # Agent process status
-        AGENT_PID=$(pgrep -f "python.*main.py.*dev" | head -1)
+        AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
         if [ -n "$AGENT_PID" ]; then
             CPU=$(ps -p "$AGENT_PID" -o %cpu= 2>/dev/null | tr -d ' ')
             MEM=$(ps -p "$AGENT_PID" -o %mem= 2>/dev/null | tr -d ' ')
@@ -161,7 +159,7 @@ METRICS_PID=$!
 (
 while true; do
     sleep 30
-    AGENT_PID=$(pgrep -f "python.*main.py.*dev" | head -1)
+    AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
     if [ -z "$AGENT_PID" ]; then
         echo ""
         echo -e "${RED}⚠️  WARNING: Agent process not found!${RESET}"
@@ -178,4 +176,3 @@ PROCESS_PID=$!
 
 # Wait for monitors
 wait $LOG_PID
-

@@ -18,18 +18,18 @@ try:
     take_note = SIMPLE_TOOLS.get("take_note")
 
     __all__ = [
-        'SIMPLE_TOOLS',
-        'get_weather',
-        'check_calendar',
-        'create_appointment',
-        'query_database',
-        'recommend_activity',
-        'calculate',
-        'get_current_time',
-        'take_note',
+        "SIMPLE_TOOLS",
+        "get_weather",
+        "check_calendar",
+        "create_appointment",
+        "query_database",
+        "recommend_activity",
+        "calculate",
+        "get_current_time",
+        "take_note",
     ]
 except ImportError as e:
     # If simplified tools not available, provide empty dict
     SIMPLE_TOOLS = {}
-    __all__ = ['SIMPLE_TOOLS']
+    __all__ = ["SIMPLE_TOOLS"]
     print(f"Warning: Could not import simplified tools: {e}")

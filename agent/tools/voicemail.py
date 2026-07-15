@@ -31,7 +31,7 @@ VOICEMAIL_KEYWORDS = [
     "please leave",
     "currently unavailable",
     "cannot take your call",
-    "not able to answer"
+    "not able to answer",
 ]
 
 # Greeting patterns that indicate a human answered
@@ -45,16 +45,13 @@ HUMAN_GREETING_PATTERNS = [
     "how can I help",
     "good morning",
     "good afternoon",
-    "good evening"
+    "good evening",
 ]
 
 
-@llm.function_tool(
-    description="Detect if the call has reached a voicemail system"
-)
+@llm.function_tool(description="Detect if the call has reached a voicemail system")
 async def detect_voicemail(
-    transcript: str = "",
-    confidence_threshold: float = 0.7
+    transcript: str = "", confidence_threshold: float = 0.7
 ) -> str:
     """
     Detect if we've reached a voicemail system
@@ -88,16 +85,21 @@ async def detect_voicemail(
                 human_score += 1
 
         # Calculate confidence
-        total_keywords = len(VOICEMAIL_KEYWORDS)
-        voicemail_confidence = min(voicemail_score / 3, 1.0)  # Cap at 3 keywords for 100%
+        voicemail_confidence = min(
+            voicemail_score / 3, 1.0
+        )  # Cap at 3 keywords for 100%
 
         # Adjust confidence based on human patterns
         if human_score > 0:
             voicemail_confidence *= 0.3  # Reduce confidence if human patterns detected
 
         # Additional checks
-        is_long_message = len(transcript_lower.split()) > 20  # Voicemails tend to be longer
-        has_instructions = any(word in transcript_lower for word in ["press", "option", "menu"])
+        is_long_message = (
+            len(transcript_lower.split()) > 20
+        )  # Voicemails tend to be longer
+        has_instructions = any(
+            word in transcript_lower for word in ["press", "option", "menu"]
+        )
 
         if is_long_message:
             voicemail_confidence += 0.1
@@ -120,7 +122,7 @@ async def detect_voicemail(
             )
         else:
             return (
-                f"Appears to be a human answering ({(1-voicemail_confidence):.0%} confidence). "
+                f"Appears to be a human answering ({(1 - voicemail_confidence):.0%} confidence). "
                 "Proceeding with conversation."
             )
 
@@ -133,10 +135,7 @@ async def detect_voicemail(
     description="Leave a voicemail message on the detected voicemail system"
 )
 async def leave_voicemail_message(
-    caller_name: str,
-    callback_number: str,
-    message: str,
-    urgent: bool = False
+    caller_name: str, callback_number: str, message: str, urgent: bool = False
 ) -> str:
     """
     Leave a structured voicemail message
@@ -158,7 +157,9 @@ async def leave_voicemail_message(
             voicemail_text += " with an urgent message"
 
         voicemail_text += f". {message}. "
-        voicemail_text += f"Please call me back at {format_phone_number(callback_number)}. "
+        voicemail_text += (
+            f"Please call me back at {format_phone_number(callback_number)}. "
+        )
 
         if urgent:
             voicemail_text += "Again, this is urgent. "
@@ -170,15 +171,15 @@ async def leave_voicemail_message(
 
     except Exception as e:
         logger.error(f"Error formatting voicemail: {e}")
-        return f"This is {caller_name}. {message}. Please call back at {callback_number}."
+        return (
+            f"This is {caller_name}. {message}. Please call back at {callback_number}."
+        )
 
 
 @llm.function_tool(
     description="Analyze voicemail greeting to extract business information"
 )
-async def analyze_voicemail_greeting(
-    transcript: str
-) -> str:
+async def analyze_voicemail_greeting(transcript: str) -> str:
     """
     Extract useful information from a voicemail greeting
 
@@ -194,7 +195,7 @@ async def analyze_voicemail_greeting(
             "person_name": None,
             "office_hours": None,
             "alternative_number": None,
-            "return_date": None
+            "return_date": None,
         }
 
         transcript_lower = transcript.lower()
@@ -205,7 +206,9 @@ async def analyze_voicemail_greeting(
             words = transcript[start:].split()[:5]  # Get next 5 words
             info["business_name"] = " ".join(words).strip(",.")
         elif "this is the office of" in transcript_lower:
-            start = transcript_lower.index("this is the office of") + len("this is the office of")
+            start = transcript_lower.index("this is the office of") + len(
+                "this is the office of"
+            )
             words = transcript[start:].split()[:5]
             info["business_name"] = " ".join(words).strip(",.")
 
@@ -214,7 +217,7 @@ async def analyze_voicemail_greeting(
         for keyword in hour_keywords:
             if keyword in transcript_lower:
                 start = transcript_lower.index(keyword)
-                hours_text = transcript[start:start+100]  # Get next 100 chars
+                hours_text = transcript[start : start + 100]  # Get next 100 chars
                 info["office_hours"] = extract_hours(hours_text)
                 break
 
@@ -222,7 +225,8 @@ async def analyze_voicemail_greeting(
         if "press" in transcript_lower and "for" in transcript_lower:
             # Extract menu options
             import re
-            pattern = r'press (\d+) for (\w+)'
+
+            pattern = r"press (\d+) for (\w+)"
             matches = re.findall(pattern, transcript_lower)
             if matches:
                 info["menu_options"] = matches
@@ -232,7 +236,7 @@ async def analyze_voicemail_greeting(
         for keyword in return_keywords:
             if keyword in transcript_lower:
                 start = transcript_lower.index(keyword)
-                date_text = transcript[start:start+50]
+                date_text = transcript[start : start + 50]
                 info["return_date"] = extract_date(date_text)
                 break
 
@@ -247,19 +251,19 @@ async def analyze_voicemail_greeting(
         if info.get("menu_options"):
             result += f"- Menu options available: {len(info['menu_options'])}\n"
 
-        return result if result != "Voicemail analysis:\n" else "Standard voicemail greeting detected."
+        return (
+            result
+            if result != "Voicemail analysis:\n"
+            else "Standard voicemail greeting detected."
+        )
 
     except Exception as e:
         logger.error(f"Error analyzing voicemail: {e}")
         return "Unable to extract specific information from voicemail greeting."
 
 
-@llm.function_tool(
-    description="Wait for the beep before leaving a voicemail message"
-)
-async def wait_for_beep(
-    max_wait_seconds: int = 10
-) -> str:
+@llm.function_tool(description="Wait for the beep before leaving a voicemail message")
+async def wait_for_beep(max_wait_seconds: int = 10) -> str:
     """
     Wait for the beep tone before leaving a message
 
@@ -312,7 +316,9 @@ class VoicemailHandler:
 
                 if "Voicemail detected" in result:
                     self.state = "detected"
-                    self.detection_confidence = float(result.split("%")[0].split()[-1]) / 100
+                    self.detection_confidence = (
+                        float(result.split("%")[0].split()[-1]) / 100
+                    )
                     return ("detected", "wait_for_beep")
 
                 elif len(self.transcript_buffer.split()) > 50:
@@ -322,7 +328,10 @@ class VoicemailHandler:
 
             elif self.state == "detected":
                 # Wait for beep
-                if "beep" in transcript.lower() or len(self.transcript_buffer.split()) > 100:
+                if (
+                    "beep" in transcript.lower()
+                    or len(self.transcript_buffer.split()) > 100
+                ):
                     self.state = "leaving_message"
                     return ("leaving_message", "leave_message")
 
@@ -348,6 +357,7 @@ class VoicemailHandler:
 
 # Helper functions
 
+
 def format_phone_number(number: str, slow: bool = False) -> str:
     """
     Format phone number for speech
@@ -360,30 +370,31 @@ def format_phone_number(number: str, slow: bool = False) -> str:
         Formatted phone number for TTS
     """
     # Remove non-numeric characters
-    digits = ''.join(filter(str.isdigit, number))
+    digits = "".join(filter(str.isdigit, number))
 
     if len(digits) == 10:  # US number
         if slow:
             # Speak each digit slowly
-            return ' '.join(digits)
+            return " ".join(digits)
         else:
             # Format as groups
             return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
-    elif len(digits) == 11 and digits[0] == '1':  # US with country code
+    elif len(digits) == 11 and digits[0] == "1":  # US with country code
         if slow:
-            return ' '.join(digits)
+            return " ".join(digits)
         else:
             return f"1-{digits[1:4]}-{digits[4:7]}-{digits[7:]}"
     else:
         # Unknown format, just space out digits
-        return ' '.join(digits) if slow else number
+        return " ".join(digits) if slow else number
 
 
 def extract_hours(text: str) -> Optional[str]:
     """Extract office hours from text"""
     import re
+
     # Look for time patterns
-    time_pattern = r'\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)'
+    time_pattern = r"\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)"
     times = re.findall(time_pattern, text)
 
     if len(times) >= 2:
@@ -394,20 +405,33 @@ def extract_hours(text: str) -> Optional[str]:
 def extract_date(text: str) -> Optional[str]:
     """Extract date from text"""
     import re
+
     # Look for date patterns
-    months = ["january", "february", "march", "april", "may", "june",
-              "july", "august", "september", "october", "november", "december"]
+    months = [
+        "january",
+        "february",
+        "march",
+        "april",
+        "may",
+        "june",
+        "july",
+        "august",
+        "september",
+        "october",
+        "november",
+        "december",
+    ]
 
     for month in months:
         if month in text.lower():
             # Try to find day
-            pattern = rf'{month}\s+(\d{{1,2}})'
+            pattern = rf"{month}\s+(\d{{1,2}})"
             match = re.search(pattern, text.lower())
             if match:
                 return f"{month.capitalize()} {match.group(1)}"
 
     # Look for other date formats
-    date_pattern = r'\d{1,2}/\d{1,2}'
+    date_pattern = r"\d{1,2}/\d{1,2}"
     match = re.search(date_pattern, text)
     if match:
         return match.group(0)

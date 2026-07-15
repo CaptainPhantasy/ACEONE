@@ -6,18 +6,15 @@ Provides weather information using OpenWeatherMap or similar API
 import os
 import httpx
 import logging
-from typing import Optional
 from livekit.agents import llm
 
 logger = logging.getLogger(__name__)
 
+
 @llm.function_tool(
     description="Get current weather information for a specific location"
 )
-async def weather_tool(
-    location: str,
-    units: str = "metric"
-) -> str:
+async def weather_tool(location: str, units: str = "metric") -> str:
     """
     Get current weather information for a location
 
@@ -35,11 +32,7 @@ async def weather_tool(
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 "https://api.openweathermap.org/data/2.5/weather",
-                params={
-                    "q": location,
-                    "appid": api_key,
-                    "units": units
-                }
+                params={"q": location, "appid": api_key, "units": units},
             )
 
             if response.status_code == 200:
@@ -77,14 +70,8 @@ async def weather_tool(
         return "I encountered an error while checking the weather. Please try again."
 
 
-@llm.function_tool(
-    description="Get weather forecast for the next few days"
-)
-async def weather_forecast(
-    location: str,
-    days: int = 3,
-    units: str = "metric"
-) -> str:
+@llm.function_tool(description="Get weather forecast for the next few days")
+async def weather_forecast(location: str, days: int = 3, units: str = "metric") -> str:
     """
     Get weather forecast for a location
 
@@ -107,8 +94,8 @@ async def weather_forecast(
                     "q": location,
                     "appid": api_key,
                     "units": units,
-                    "cnt": days * 8  # 8 forecasts per day (every 3 hours)
-                }
+                    "cnt": days * 8,  # 8 forecasts per day (every 3 hours)
+                },
             )
 
             if response.status_code == 200:
@@ -119,12 +106,11 @@ async def weather_forecast(
                 for item in data["list"]:
                     date = item["dt_txt"].split()[0]
                     if date not in forecasts:
-                        forecasts[date] = {
-                            "temps": [],
-                            "descriptions": []
-                        }
+                        forecasts[date] = {"temps": [], "descriptions": []}
                     forecasts[date]["temps"].append(item["main"]["temp"])
-                    forecasts[date]["descriptions"].append(item["weather"][0]["description"])
+                    forecasts[date]["descriptions"].append(
+                        item["weather"][0]["description"]
+                    )
 
                 unit_symbol = "°C" if units == "metric" else "°F"
                 forecast_text = f"Weather forecast for {location}: "
@@ -132,7 +118,9 @@ async def weather_forecast(
                 for date, info in list(forecasts.items())[:days]:
                     avg_temp = sum(info["temps"]) / len(info["temps"])
                     # Get most common description
-                    description = max(set(info["descriptions"]), key=info["descriptions"].count)
+                    description = max(
+                        set(info["descriptions"]), key=info["descriptions"].count
+                    )
                     forecast_text += f"{date}: {description}, average temperature {avg_temp:.1f}{unit_symbol}. "
 
                 return forecast_text
@@ -148,10 +136,7 @@ async def weather_forecast(
 @llm.function_tool(
     description="Check if weather conditions are suitable for an outdoor activity"
 )
-async def check_weather_conditions(
-    location: str,
-    activity: str
-) -> str:
+async def check_weather_conditions(location: str, activity: str) -> str:
     """
     Check if weather is suitable for a specific activity
 
@@ -173,7 +158,8 @@ async def check_weather_conditions(
 
         # Extract temperature (simple parsing)
         import re
-        temp_match = re.search(r'temperature is ([\d.]+)°C', weather_info)
+
+        temp_match = re.search(r"temperature is ([\d.]+)°C", weather_info)
         temp = float(temp_match.group(1)) if temp_match else 20
 
         # Activity-specific recommendations
@@ -202,7 +188,9 @@ async def check_weather_conditions(
         else:
             # Generic outdoor activity
             if is_clear and not is_raining and 10 < temp < 28:
-                return f"Weather looks good for {activity} in {location}. {weather_info}"
+                return (
+                    f"Weather looks good for {activity} in {location}. {weather_info}"
+                )
             else:
                 return f"Check conditions carefully for {activity}. {weather_info}"
 

@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated dependency, cache, and build directories"
+paths = [
+  '''(^|/)(\.next|node_modules|\.venv|venv|\.pytest_cache|\.ruff_cache|__pycache__)/''',
+]

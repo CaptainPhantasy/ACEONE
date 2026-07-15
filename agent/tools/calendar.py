@@ -3,13 +3,10 @@ Calendar Tool Implementation
 Manages calendar appointments and scheduling
 """
 
-import os
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from livekit.agents import llm
-import httpx
-import json
 
 logger = logging.getLogger(__name__)
 
@@ -17,16 +14,14 @@ logger = logging.getLogger(__name__)
 calendar_store = {}
 
 
-@llm.function_tool(
-    description="Create a new calendar appointment or meeting"
-)
+@llm.function_tool(description="Create a new calendar appointment or meeting")
 async def calendar_tool(
     title: str,
     date: str,
     time: str,
     duration_minutes: int = 60,
     description: Optional[str] = None,
-    location: Optional[str] = None
+    location: Optional[str] = None,
 ) -> str:
     """
     Create a calendar appointment
@@ -72,7 +67,7 @@ async def calendar_tool(
             "duration_minutes": duration_minutes,
             "description": description,
             "location": location,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
         # Check for conflicts
@@ -118,10 +113,7 @@ async def calendar_tool(
 @llm.function_tool(
     description="Check calendar availability for a specific date and time"
 )
-async def check_availability(
-    date: str,
-    time: Optional[str] = None
-) -> str:
+async def check_availability(date: str, time: Optional[str] = None) -> str:
     """
     Check calendar availability
 
@@ -190,12 +182,8 @@ async def check_availability(
         return "I encountered an error while checking availability."
 
 
-@llm.function_tool(
-    description="List upcoming calendar appointments"
-)
-async def list_appointments(
-    days_ahead: int = 7
-) -> str:
+@llm.function_tool(description="List upcoming calendar appointments")
+async def list_appointments(days_ahead: int = 7) -> str:
     """
     List upcoming appointments
 
@@ -239,13 +227,8 @@ async def list_appointments(
         return "I encountered an error while listing appointments."
 
 
-@llm.function_tool(
-    description="Cancel or delete a calendar appointment"
-)
-async def cancel_appointment(
-    title: str,
-    date: Optional[str] = None
-) -> str:
+@llm.function_tool(description="Cancel or delete a calendar appointment")
+async def cancel_appointment(title: str, date: Optional[str] = None) -> str:
     """
     Cancel an appointment
 
@@ -280,10 +263,14 @@ async def cancel_appointment(
             return f"I couldn't find an appointment matching '{title}'."
 
         if len(found_appointments) > 1:
-            response = f"I found {len(found_appointments)} appointments matching '{title}':\n"
+            response = (
+                f"I found {len(found_appointments)} appointments matching '{title}':\n"
+            )
             for apt_id, apt in found_appointments:
                 apt_datetime = datetime.fromisoformat(apt["datetime"])
-                response += f"- {apt_datetime.strftime('%B %d at %I:%M %p')}: {apt['title']}\n"
+                response += (
+                    f"- {apt_datetime.strftime('%B %d at %I:%M %p')}: {apt['title']}\n"
+                )
             response += "Please be more specific about which one to cancel."
             return response
 
@@ -302,14 +289,9 @@ async def cancel_appointment(
         return "I encountered an error while cancelling the appointment."
 
 
-@llm.function_tool(
-    description="Reschedule an existing appointment to a new date/time"
-)
+@llm.function_tool(description="Reschedule an existing appointment to a new date/time")
 async def reschedule_appointment(
-    title: str,
-    new_date: str,
-    new_time: str,
-    duration_minutes: Optional[int] = None
+    title: str, new_date: str, new_time: str, duration_minutes: Optional[int] = None
 ) -> str:
     """
     Reschedule an appointment
@@ -378,10 +360,9 @@ async def reschedule_appointment(
 
 # Helper functions
 
+
 async def check_conflicts(
-    datetime_obj: datetime,
-    duration_minutes: int,
-    exclude_id: Optional[str] = None
+    datetime_obj: datetime, duration_minutes: int, exclude_id: Optional[str] = None
 ) -> Optional[Dict]:
     """Check for scheduling conflicts"""
     end_time = datetime_obj + timedelta(minutes=duration_minutes)
@@ -394,7 +375,7 @@ async def check_conflicts(
         apt_end = apt_datetime + timedelta(minutes=apt["duration_minutes"])
 
         # Check for overlap
-        if (datetime_obj < apt_end and end_time > apt_datetime):
+        if datetime_obj < apt_end and end_time > apt_datetime:
             return apt
 
     return None
@@ -412,21 +393,28 @@ def find_available_slots(appointments: List[Dict], date: datetime.date) -> List[
     # Check slot before first appointment
     first_apt = datetime.fromisoformat(appointments[0]["datetime"])
     if first_apt > business_start:
-        slots.append(f"{business_start.strftime('%I:%M %p')} - {first_apt.strftime('%I:%M %p')}")
+        slots.append(
+            f"{business_start.strftime('%I:%M %p')} - {first_apt.strftime('%I:%M %p')}"
+        )
 
     # Check slots between appointments
     for i in range(len(appointments) - 1):
-        current_end = datetime.fromisoformat(appointments[i]["datetime"]) + \
-                     timedelta(minutes=appointments[i]["duration_minutes"])
+        current_end = datetime.fromisoformat(appointments[i]["datetime"]) + timedelta(
+            minutes=appointments[i]["duration_minutes"]
+        )
         next_start = datetime.fromisoformat(appointments[i + 1]["datetime"])
 
         if next_start > current_end:
-            slots.append(f"{current_end.strftime('%I:%M %p')} - {next_start.strftime('%I:%M %p')}")
+            slots.append(
+                f"{current_end.strftime('%I:%M %p')} - {next_start.strftime('%I:%M %p')}"
+            )
 
     # Check slot after last appointment
     last_apt = datetime.fromisoformat(appointments[-1]["datetime"])
     last_end = last_apt + timedelta(minutes=appointments[-1]["duration_minutes"])
     if last_end < business_end:
-        slots.append(f"{last_end.strftime('%I:%M %p')} - {business_end.strftime('%I:%M %p')}")
+        slots.append(
+            f"{last_end.strftime('%I:%M %p')} - {business_end.strftime('%I:%M %p')}"
+        )
 
     return slots

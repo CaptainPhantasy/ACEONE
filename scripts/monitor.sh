@@ -18,9 +18,6 @@ echo ""
 
 # Function to highlight key metrics
 highlight() {
-    local pattern="$1"
-    local color="$2"
-    
     tail -f "$LOG_FILE" 2>/dev/null | while IFS= read -r line; do
         # Check for different log types and colorize
         if echo "$line" | grep -q "USER TRANSCRIPT"; then
@@ -51,4 +48,3 @@ else
     done
     highlight
 fi
-

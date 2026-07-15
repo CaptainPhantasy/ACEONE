@@ -1,6 +1,6 @@
 # ACE - Indianapolis Pickleball Club Voice Agent
 
-Voice agent for answering phone calls to Indianapolis Pickleball Club. Embodies Chris Sears' authentic voice and uses RAG for accurate knowledge retrieval.
+Voice agent for answering phone calls to Indianapolis Pickleball Club. ACE uses an approved IPC communication style and RAG for accurate knowledge retrieval.
 
 **⚠️ CURRENT STATUS:** See `STATUS.md` for latest issues and fixes needed.
 
@@ -18,10 +18,7 @@ Voice agent for answering phone calls to Indianapolis Pickleball Club. Embodies 
 ### 1. Environment Setup
 
 ```bash
-cd agent
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
+uv sync --frozen
 ```
 
 ### 2. Configure Environment
@@ -39,9 +36,7 @@ AGENT_NAME=sage-assistant
 ### 3. Run Agent
 
 ```bash
-cd agent
-source venv/bin/activate
-python main.py dev
+uv run --frozen python -m agent.main dev
 ```
 
 Agent will register and wait for connections.
@@ -122,5 +117,5 @@ Tools use `@llm.function_tool` decorator. For complex types, use JSON strings:
 
 - Uses LiveKit Playground for testing (recommended - auto-dispatches)
 - Custom test GUI available in `test_gui/` (requires manual dispatch)
-- Agent runs in dev mode: `python main.py dev`
+- Agent runs in dev mode: `uv run --frozen python -m agent.main dev`
 - Production mode requires different setup (not covered here)

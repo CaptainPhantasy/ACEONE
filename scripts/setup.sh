@@ -5,6 +5,9 @@
 
 set -e
 
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT_DIR"
+
 echo "================================"
 echo "ClaudeVoice Development Setup"
 echo "================================"
@@ -14,12 +17,11 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-echo -e "\n${YELLOW}1. Checking Python version...${NC}"
-python_version=$(python3 --version | cut -d' ' -f2 | cut -d'.' -f1,2)
-if [[ $(echo "$python_version >= 3.9" | bc) -eq 1 ]]; then
-    echo -e "${GREEN}✓ Python $python_version installed${NC}"
+echo -e "\n${YELLOW}1. Checking uv and Python...${NC}"
+if command -v uv >/dev/null && uv python find 3.13 >/dev/null; then
+    echo -e "${GREEN}✓ uv and Python 3.13 available${NC}"
 else
-    echo "❌ Python 3.9+ required. Current: $python_version"
+    echo "❌ uv and Python 3.13 are required"
     exit 1
 fi
 
@@ -33,16 +35,12 @@ else
 fi
 
 echo -e "\n${YELLOW}3. Installing Python dependencies...${NC}"
-cd agent
-python3 -m venv venv
-source venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
+uv sync --frozen
 echo -e "${GREEN}✓ Python dependencies installed${NC}"
 
 echo -e "\n${YELLOW}4. Installing Node.js dependencies...${NC}"
-cd ../webhook
-npm install
+cd webhook
+npm ci
 echo -e "${GREEN}✓ Node.js dependencies installed${NC}"
 
 echo -e "\n${YELLOW}5. Setting up environment file...${NC}"
@@ -71,7 +69,7 @@ echo -e "\n${YELLOW}7. Setting up Git hooks...${NC}"
 cat > .git/hooks/pre-commit << 'EOF'
 #!/bin/bash
 # Run tests before commit
-python3 -m pytest tests/unit/ -q
+uv run --frozen pytest -q
 if [ $? -ne 0 ]; then
     echo "Tests failed. Please fix before committing."
     exit 1
@@ -91,9 +89,9 @@ echo -e "================================"
 echo ""
 echo "Next steps:"
 echo "1. Add your API keys to .env.local"
-echo "2. Run: cd agent && python main.py dev"
+echo "2. Run: uv run --frozen python -m agent.main dev"
 echo "3. In another terminal: cd webhook && npm run dev"
 echo "4. Access LiveKit playground to test"
 echo ""
-echo "Run tests with: pytest tests/ -v"
+echo "Run tests with: uv run --frozen pytest -v"
 echo "Deploy with: ./scripts/deploy.sh"

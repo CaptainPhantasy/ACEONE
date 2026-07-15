@@ -158,8 +158,8 @@ echo -e "\n${YELLOW}Test 9: Voicemail Detection${NC}"
 python3 -c "
 import asyncio
 import sys
-sys.path.append('../../agent')
-from tools.voicemail import detect_voicemail
+sys.path.append('../..')
+from agent.tools.voicemail import detect_voicemail
 
 async def test():
     result = await detect_voicemail('Please leave a message after the beep')

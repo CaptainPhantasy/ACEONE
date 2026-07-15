@@ -1,5 +1,5 @@
 # Python Agent Dockerfile
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 # Set working directory
 WORKDIR /app
@@ -13,15 +13,12 @@ RUN apt-get update && apt-get install -y \
     portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for better caching
-COPY agent/requirements.txt .
+# Install the locked Python environment before copying application sources.
+COPY --from=ghcr.io/astral-sh/uv:0.11.29 /uv /uvx /bin/
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy agent code
-COPY agent/ .
-
+COPY . .
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -31,4 +28,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD python -c "import sys; sys.exit(0)" || exit 1
 
 # Run the agent
-CMD ["python", "main.py", "start"]
+CMD ["/app/.venv/bin/python", "-m", "agent.main", "start"]

@@ -10,7 +10,6 @@ from typing import Any, Dict, List, Optional
 from datetime import datetime
 from livekit.agents import llm
 import asyncpg
-import sqlite3
 import aiosqlite
 
 logger = logging.getLogger(__name__)
@@ -18,24 +17,72 @@ logger = logging.getLogger(__name__)
 # In-memory data store for demo (replace with real database)
 demo_database = {
     "customers": [
-        {"id": 1, "name": "John Doe", "email": "john@example.com", "phone": "+1234567890", "status": "active"},
-        {"id": 2, "name": "Jane Smith", "email": "jane@example.com", "phone": "+0987654321", "status": "active"},
-        {"id": 3, "name": "Bob Johnson", "email": "bob@example.com", "phone": "+1122334455", "status": "inactive"}
+        {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com",
+            "phone": "+1234567890",
+            "status": "active",
+        },
+        {
+            "id": 2,
+            "name": "Jane Smith",
+            "email": "jane@example.com",
+            "phone": "+0987654321",
+            "status": "active",
+        },
+        {
+            "id": 3,
+            "name": "Bob Johnson",
+            "email": "bob@example.com",
+            "phone": "+1122334455",
+            "status": "inactive",
+        },
     ],
     "orders": [
-        {"id": 101, "customer_id": 1, "date": "2024-01-15", "total": 150.00, "status": "delivered"},
-        {"id": 102, "customer_id": 2, "date": "2024-01-16", "total": 75.50, "status": "processing"},
-        {"id": 103, "customer_id": 1, "date": "2024-01-17", "total": 200.00, "status": "shipped"}
+        {
+            "id": 101,
+            "customer_id": 1,
+            "date": "2024-01-15",
+            "total": 150.00,
+            "status": "delivered",
+        },
+        {
+            "id": 102,
+            "customer_id": 2,
+            "date": "2024-01-16",
+            "total": 75.50,
+            "status": "processing",
+        },
+        {
+            "id": 103,
+            "customer_id": 1,
+            "date": "2024-01-17",
+            "total": 200.00,
+            "status": "shipped",
+        },
     ],
     "products": [
         {"id": 1001, "name": "Widget A", "price": 25.00, "stock": 100},
         {"id": 1002, "name": "Gadget B", "price": 50.00, "stock": 50},
-        {"id": 1003, "name": "Tool C", "price": 75.00, "stock": 25}
+        {"id": 1003, "name": "Tool C", "price": 75.00, "stock": 25},
     ],
     "appointments": [
-        {"id": 1, "customer_name": "John Doe", "date": "2024-01-20", "time": "14:00", "service": "consultation"},
-        {"id": 2, "customer_name": "Jane Smith", "date": "2024-01-21", "time": "10:00", "service": "support"}
-    ]
+        {
+            "id": 1,
+            "customer_name": "John Doe",
+            "date": "2024-01-20",
+            "time": "14:00",
+            "service": "consultation",
+        },
+        {
+            "id": 2,
+            "customer_name": "Jane Smith",
+            "date": "2024-01-21",
+            "time": "10:00",
+            "service": "support",
+        },
+    ],
 }
 
 
@@ -55,7 +102,7 @@ class DatabaseConnection:
                     port=int(os.getenv("DB_PORT", "5432")),
                     user=os.getenv("DB_USER", "user"),
                     password=os.getenv("DB_PASSWORD", "password"),
-                    database=os.getenv("DB_NAME", "claudevoice")
+                    database=os.getenv("DB_NAME", "claudevoice"),
                 )
             elif self.db_type == "sqlite":
                 db_path = os.getenv("DB_PATH", "claudevoice.db")
@@ -86,9 +133,7 @@ db = DatabaseConnection()
     description="Query database for customer, order, product, or appointment information"
 )
 async def database_query(
-    query_type: str,
-    search_term: str = "",
-    filters: str = "{}"
+    query_type: str, search_term: str = "", filters: str = "{}"
 ) -> str:
     """
     Query the database for information
@@ -101,7 +146,6 @@ async def database_query(
     Returns:
         Query results as a natural language response
     """
-    import json
     try:
         # Parse filters from JSON string
         filters_dict = None
@@ -110,9 +154,9 @@ async def database_query(
                 filters_dict = json.loads(filters)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid JSON in filters: {filters}")
-        
+
         search = search_term if search_term else None
-        
+
         # For demo, use in-memory database
         if db.connection is None:
             return await query_demo_database(query_type, search, filters_dict)
@@ -129,9 +173,7 @@ async def database_query(
 
 
 async def query_demo_database(
-    query_type: str,
-    search_term: Optional[str],
-    filters: Optional[Dict[str, Any]]
+    query_type: str, search_term: Optional[str], filters: Optional[Dict[str, Any]]
 ) -> str:
     """Query the demo in-memory database"""
     try:
@@ -145,7 +187,8 @@ async def query_demo_database(
         if search_term:
             search_lower = search_term.lower()
             results = [
-                item for item in results
+                item
+                for item in results
                 if any(search_lower in str(value).lower() for value in item.values())
             ]
 
@@ -153,8 +196,7 @@ async def query_demo_database(
         if filters:
             for key, value in filters.items():
                 results = [
-                    item for item in results
-                    if key in item and item[key] == value
+                    item for item in results if key in item and item[key] == value
                 ]
 
         # Format response
@@ -180,9 +222,7 @@ async def query_demo_database(
 @llm.function_tool(
     description="Get detailed information about a specific customer by name or ID"
 )
-async def get_customer_info(
-    customer_identifier: str
-) -> str:
+async def get_customer_info(customer_identifier: str) -> str:
     """
     Get customer information
 
@@ -203,15 +243,21 @@ async def get_customer_info(
         except ValueError:
             # Search by name
             customer = next(
-                (c for c in customers if customer_identifier.lower() in c["name"].lower()),
-                None
+                (
+                    c
+                    for c in customers
+                    if customer_identifier.lower() in c["name"].lower()
+                ),
+                None,
             )
 
         if not customer:
             return f"I couldn't find a customer matching '{customer_identifier}'."
 
         # Get customer's orders
-        orders = [o for o in demo_database["orders"] if o["customer_id"] == customer["id"]]
+        orders = [
+            o for o in demo_database["orders"] if o["customer_id"] == customer["id"]
+        ]
 
         response = (
             f"Customer: {customer['name']}\n"
@@ -232,12 +278,8 @@ async def get_customer_info(
         return "I encountered an error while retrieving customer information."
 
 
-@llm.function_tool(
-    description="Check product inventory and availability"
-)
-async def check_inventory(
-    product_name: str
-) -> str:
+@llm.function_tool(description="Check product inventory and availability")
+async def check_inventory(product_name: str) -> str:
     """
     Check product inventory
 
@@ -250,14 +292,19 @@ async def check_inventory(
     try:
         products = demo_database["products"]
         product = next(
-            (p for p in products if product_name.lower() in p["name"].lower()),
-            None
+            (p for p in products if product_name.lower() in p["name"].lower()), None
         )
 
         if not product:
             return f"I couldn't find a product matching '{product_name}'."
 
-        stock_status = "in stock" if product["stock"] > 10 else "low stock" if product["stock"] > 0 else "out of stock"
+        stock_status = (
+            "in stock"
+            if product["stock"] > 10
+            else "low stock"
+            if product["stock"] > 0
+            else "out of stock"
+        )
 
         return (
             f"{product['name']} - Price: ${product['price']:.2f}\n"
@@ -269,14 +316,8 @@ async def check_inventory(
         return "I encountered an error while checking inventory."
 
 
-@llm.function_tool(
-    description="Add or update information in the database"
-)
-async def update_database(
-    table: str,
-    operation: str,
-    data: Dict[str, Any]
-) -> str:
+@llm.function_tool(description="Add or update information in the database")
+async def update_database(table: str, operation: str, data: Dict[str, Any]) -> str:
     """
     Update database information
 
@@ -328,7 +369,9 @@ async def update_database(
             # Remove record
             records = demo_database[table.lower()]
             original_length = len(records)
-            demo_database[table.lower()] = [r for r in records if r.get("id") != data["id"]]
+            demo_database[table.lower()] = [
+                r for r in records if r.get("id") != data["id"]
+            ]
 
             if len(demo_database[table.lower()]) < original_length:
                 return f"Successfully deleted {table.rstrip('s')} {data['id']}."
@@ -344,6 +387,7 @@ async def update_database(
 
 
 # Helper functions for formatting results
+
 
 def format_customer_results(customers: List[Dict]) -> str:
     """Format customer query results"""
@@ -376,7 +420,7 @@ def format_order_results(orders: List[Dict]) -> str:
         )
     else:
         response = f"Found {len(orders)} orders:\n"
-        total_value = sum(o['total'] for o in orders)
+        total_value = sum(o["total"] for o in orders)
         for o in orders[:5]:
             response += f"- Order {o['id']}: ${o['total']:.2f} ({o['status']})\n"
         response += f"Total value: ${total_value:.2f}"
@@ -387,12 +431,14 @@ def format_product_results(products: List[Dict]) -> str:
     """Format product query results"""
     if len(products) == 1:
         p = products[0]
-        stock_status = "in stock" if p['stock'] > 10 else "low stock" if p['stock'] > 0 else "out of stock"
-        return (
-            f"{p['name']}: "
-            f"${p['price']:.2f}, "
-            f"{p['stock']} units {stock_status}"
+        stock_status = (
+            "in stock"
+            if p["stock"] > 10
+            else "low stock"
+            if p["stock"] > 0
+            else "out of stock"
         )
+        return f"{p['name']}: ${p['price']:.2f}, {p['stock']} units {stock_status}"
     else:
         response = f"Found {len(products)} products:\n"
         for p in products[:5]:
@@ -412,19 +458,25 @@ def format_appointment_results(appointments: List[Dict]) -> str:
     else:
         response = f"Found {len(appointments)} appointments:\n"
         for a in appointments[:5]:
-            response += f"- {a['date']} at {a['time']}: {a['customer_name']} ({a['service']})\n"
+            response += (
+                f"- {a['date']} at {a['time']}: {a['customer_name']} ({a['service']})\n"
+            )
         return response
 
 
 # PostgreSQL implementation (placeholder)
-async def query_postgresql(query_type: str, search_term: Optional[str], filters: Optional[Dict]) -> str:
+async def query_postgresql(
+    query_type: str, search_term: Optional[str], filters: Optional[Dict]
+) -> str:
     """Query PostgreSQL database"""
     # This would contain actual PostgreSQL queries using asyncpg
     return "PostgreSQL queries not yet implemented"
 
 
 # SQLite implementation (placeholder)
-async def query_sqlite(query_type: str, search_term: Optional[str], filters: Optional[Dict]) -> str:
+async def query_sqlite(
+    query_type: str, search_term: Optional[str], filters: Optional[Dict]
+) -> str:
     """Query SQLite database"""
     # This would contain actual SQLite queries using aiosqlite
     return "SQLite queries not yet implemented"

@@ -4,10 +4,10 @@ All tools work without decorators
 """
 
 import logging
-from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
 
 # Weather Tool
 async def get_weather(location: str, units: str = "metric") -> str:
@@ -23,9 +23,10 @@ async def get_weather(location: str, units: str = "metric") -> str:
 
     weather = weather_map.get(location.lower(), {"temp": 20, "condition": "Clear"})
     temp_unit = "°C" if units == "metric" else "°F"
-    temp = weather["temp"] if units == "metric" else int(weather["temp"] * 9/5 + 32)
+    temp = weather["temp"] if units == "metric" else int(weather["temp"] * 9 / 5 + 32)
 
     return f"The weather in {location} is {weather['condition']} with a temperature of {temp}{temp_unit}."
+
 
 # Calendar Tool
 async def check_calendar(date: str = None) -> str:
@@ -43,16 +44,15 @@ async def check_calendar(date: str = None) -> str:
     else:
         return f"You have no appointments on {date}. The day is free."
 
+
 async def create_appointment(
-    title: str,
-    date: str,
-    time: str,
-    duration_minutes: int = 30
+    title: str, date: str, time: str, duration_minutes: int = 30
 ) -> str:
     """Create a calendar appointment."""
     logger.info(f"Creating appointment: {title} on {date} at {time}")
 
     return f"Appointment '{title}' has been created for {date} at {time} for {duration_minutes} minutes."
+
 
 # Database Tool
 async def query_database(query: str) -> str:
@@ -69,10 +69,13 @@ async def query_database(query: str) -> str:
     else:
         return f"Query executed successfully. No specific data found for: {query}"
 
+
 # Activity Recommendation Tool
 async def recommend_activity(weather: str = None, preferences: str = None) -> str:
     """Recommend activities based on weather and preferences."""
-    logger.info(f"Recommending activity for weather: {weather}, preferences: {preferences}")
+    logger.info(
+        f"Recommending activity for weather: {weather}, preferences: {preferences}"
+    )
 
     if weather and "rain" in weather.lower():
         return "Since it's raining, I recommend indoor activities like visiting a museum, watching a movie, or reading a book."
@@ -81,6 +84,7 @@ async def recommend_activity(weather: str = None, preferences: str = None) -> st
     else:
         return "I suggest checking local events, trying a new restaurant, or exploring a nearby neighborhood."
 
+
 # Simple Calculation Tool
 async def calculate(expression: str) -> str:
     """Perform simple calculations."""
@@ -88,13 +92,12 @@ async def calculate(expression: str) -> str:
 
     try:
         # Only allow safe math operations
-        allowed_names = {
-            k: v for k, v in {"__builtins__": None}.items()
-        }
+        allowed_names = {k: v for k, v in {"__builtins__": None}.items()}
         result = eval(expression, {"__builtins__": {}}, allowed_names)
         return f"The result of {expression} is {result}"
-    except Exception as e:
-        return f"I couldn't calculate that. Please provide a simple mathematical expression."
+    except Exception:
+        return "I couldn't calculate that. Please provide a simple mathematical expression."
+
 
 # Time Tool
 async def get_current_time(timezone: str = None) -> str:
@@ -110,6 +113,7 @@ async def get_current_time(timezone: str = None) -> str:
     else:
         return f"The current time is {time.strftime('%I:%M %p on %B %d, %Y')}"
 
+
 # Note-taking Tool
 async def take_note(content: str, title: str = None) -> str:
     """Take a note or reminder."""
@@ -119,6 +123,7 @@ async def take_note(content: str, title: str = None) -> str:
         return f"I've saved your note titled '{title}': {content}"
     else:
         return f"I've saved your note: {content}"
+
 
 # All tools dictionary for easy import
 SIMPLE_TOOLS = {

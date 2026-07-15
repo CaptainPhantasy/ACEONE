@@ -1,251 +1,231 @@
-# Voice Quality and Identity Improvements Plan
+# Voice Quality and Identity Improvement Plan
 
 <!-- markdownlint-disable MD013 -->
 
 **Created:** November 2, 2025
-**Status:** Ready for Implementation
 
-## Research Findings
+**Validated against the repository and current provider docs:** July 15, 2026
+**Status:** Runtime lock complete; voice and identity implementation remains
 
-### OpenAI TTS Limitations
+## Goal
 
-- OpenAI TTS does NOT support SSML markup
-- Speed parameter can be set per request (dynamic speed is possible)
-- Pauses must be implemented via punctuation (periods, commas, ellipsis) or text formatting
-- tts-1-hd provides significantly better quality than tts-1
+Make ACE sound natural while keeping its identity unambiguous: ACE is the
+Indianapolis Pickleball Club assistant. It may use Chris Sears' approved tone
+and stories, but it must never claim to be Chris or his literal voice.
 
-### Current Issues
+## Facts confirmed before implementation
 
-- Config defaults don't match prompt recommendations (tts-1 vs tts-1-hd, 1.0 vs 1.05 speed)
-- No pause architecture implementation
-- Identity confusion (agent says "voice of Chris" instead of "IPC assistant")
-- Prompt mentions SSML but it's not supported - needs text-based approach
+- `agent/main.py` sends the LLM stream to the `openai.TTS` instance owned by
+  `AgentSession`. A standalone helper that is never connected to that stream
+  cannot change synthesized speech.
+- `agent/config.py` defaults are overridden by `.env.example`, deployed
+  environment variables, and any local `.env` copied from the example.
+- Identity text comes from three active sources: `persona/ace prompt`, the
+  fallback in `agent/main.py`, and RAG chunks loaded from
+  `persona/knowledge.md`.
+- The repository now installs from `pyproject.toml` and `uv.lock` on Python
+  3.13. The plan and its future implementation can target LiveKit Agents
+  1.6.5 instead of relying on changing lower-bound dependency ranges.
+- OpenAI's speech endpoint supports `tts-1`, `tts-1-hd`, and newer instruction-
+  capable speech models. Speed is configurable from 0.25 to 4.0. Model and
+  voice quality must be selected by a recorded comparison, not an unsupported
+  latency claim.
+- LiveKit exposes `Agent.tts_node` for transforming the text stream before it
+  reaches TTS. The implementation must use that hook, or an equivalent hook
+  verified against the locked SDK.
 
-## Implementation Tasks
+## Task 1: Lock the runtime before changing behavior — completed July 15, 2026
 
-### 1. Update TTS Configuration Defaults
+**Files:** `pyproject.toml`, `uv.lock`, CI configuration
 
-**File:** `agent/config.py` lines 61-63
+1. Replace broad LiveKit, OpenAI, and test dependency ranges with a lock that
+   installs on the supported Python version.
+2. Record the exact `Agent.tts_node` signature for that LiveKit version.
+3. Add gates for a clean install, import/compile, unit tests, and a no-network
+   agent-construction smoke test.
+4. Keep one explicit, opt-in live voice test for billed provider calls.
 
-Change defaults to match prompt recommendations (lines 771-779 of ace prompt):
+**Exit evidence:** a fresh environment installed from `uv.lock`; 18 tests,
+Ruff, format checking, compilation, and `pip-audit` passed. The webhook also
+builds under its locked Node dependencies with a zero-vulnerability audit.
 
-- Model: `tts-1` → `tts-1-hd` (better quality, ~150ms latency)
-- Voice: `alloy` → `echo` (recommended, or keep as option)
-- Speed: `1.0` → `1.05` (matches 155 WPM base rate)
+## Task 2: Select a voice from recorded evidence
 
-**Current Code:**
+**Files:** `agent/config.py`, `.env.example`, deployment environment settings
+
+Test at least these candidates with the same short IPC script:
+
+- Current baseline: `tts-1` / `alloy` / `1.0`
+- Quality baseline: `tts-1-hd` / `echo` / `1.05`
+- Current instruction-capable OpenAI speech model supported by the locked
+  LiveKit plugin
+
+Score each recording for first-audio latency, intelligibility over a phone
+codec, pronunciation of IPC terms, warmth, interruption recovery, and cost.
+Choose the winner only after listening to the rendered call audio.
+
+When a winner is selected, update every configuration surface together:
 
 ```python
-self.tts_model = os.getenv("TTS_MODEL", OpenAITTSModel.TTS_1.value)
-self.tts_voice = os.getenv("TTS_VOICE", OpenAIVoice.ALLOY.value)
-self.tts_speed = float(os.getenv("TTS_SPEED", "1.0"))
+self.tts_model = os.getenv("TTS_MODEL", SELECTED_MODEL)
+self.tts_voice = os.getenv("TTS_VOICE", SELECTED_VOICE)
+self.tts_speed = float(os.getenv("TTS_SPEED", SELECTED_SPEED))
 ```
 
-**Should Be:**
+- Update `TTS_MODEL`, `TTS_VOICE`, and `TTS_SPEED` in `.env.example`.
+- Update deployed secrets/environment values; code defaults do not override an
+  existing environment variable.
+- Search deployment scripts and documentation for stale values.
+- Validate model, voice, and speed at startup and fail with a useful error.
 
-```python
-self.tts_model = os.getenv("TTS_MODEL", OpenAITTSModel.TTS_1_HD.value)
-self.tts_voice = os.getenv("TTS_VOICE", OpenAIVoice.ECHO.value)
-self.tts_speed = float(os.getenv("TTS_SPEED", "1.05"))
-```
+## Task 3: Correct identity in every active source
 
-### 2. Fix ACE Identity in Prompt
+### `persona/ace prompt`
 
-**File:** `persona/ace prompt` lines 6-12
-
-**Current (Line 8):**
+Replace embodiment language with:
 
 ```text
-You are **ACE**, the voice and chat embodiment of **Chris Sears** - founder and owner of Indianapolis Pickleball Club. You don't just work for IPC; you ARE Chris's digital extension, speaking with his authentic voice...
+You are ACE, the Indianapolis Pickleball Club assistant. You use Chris Sears'
+approved communication style and may share clearly attributed IPC stories,
+but you are not Chris Sears and must never claim to be his literal voice.
+
+When asked who or what you are, answer: "I'm ACE, the Indianapolis Pickleball
+Club assistant."
 ```
 
-**Should Be:**
+Add these rules near the primary identity section:
 
 ```text
-You are **ACE**, the assistant for Indianapolis Pickleball Club. You speak with Chris Sears' authentic voice and communication style - using his phrases, tone, and sharing his experiences - but you ARE the Indianapolis Pickleball Club assistant, not Chris himself.
-
-When asked "Who are you?" or "What are you?", ALWAYS respond: "I'm ACE, the Indianapolis Pickleball Club assistant."
-
-NEVER say you are "the voice of Chris Sears" or that you ARE Chris Sears. You are the assistant who speaks in Chris's voice.
+- Say: "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club assistant."
+- Attribute Chris's experiences to Chris; do not narrate them as your own.
+- Never say you are Chris, his embodiment, his digital extension, or his voice.
 ```
 
-**Add New Section After IDENTITY & MISSION:**
+Update the Chris staff heading, the quality checklist, and the final mission
+statement so none of them contradict those rules.
+
+### `persona/knowledge.md`
+
+Change `Chris Sears (Founder/Owner - YOU embody him)` to a factual staff
+heading. Remove or rewrite any instruction-like identity claims from RAG data.
+Knowledge chunks should provide facts; they must not compete with the system
+prompt for identity control.
+
+### `agent/main.py`
+
+Apply the same wording to the fallback prompt and change the
+`IPCAssistant` class description so maintenance text does not preserve the old
+identity contract.
+
+## Task 4: Use natural text without spoken control tokens
+
+Update `persona/ace prompt` and `phone_additions` with these rules:
 
 ```text
-## IDENTIFICATION RULES
-
-CRITICAL: When identifying yourself:
-- ✅ Say: "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club assistant"
-- ✅ You can say you speak in Chris's voice/style
-- ❌ NEVER say you are "the voice of Chris Sears" or "Chris Sears' voice"
-- ❌ NEVER say you ARE Chris Sears
-- ❌ NEVER say "I am Chris's digital extension" or "I am Chris's embodiment"
-
-You ARE the assistant for Indianapolis Pickleball Club. You SPEAK in Chris's voice and style.
+- Keep most phone turns to one or two short sentences.
+- Prefer ordinary sentence punctuation and contractions.
+- Use an occasional ellipsis only when a natural thinking pause is intended.
+- Never output SSML, XML, bracketed pause tokens, or repeated-period controls.
+- Do not insert commas where normal grammar would not use them.
+- Ask one clear follow-up question instead of delivering a monologue.
 ```
 
-**Update Line 279:**
+Examples must contain only text safe to speak aloud:
 
 ```text
-**Chris Sears (Founder/Owner - You speak in his voice and style)**
+"That's the thing. Empty courts with high prices? That's not us."
+"Nine courts, climate controlled, with 24/7 access."
+"The first day after we went paid... only two people showed up."
 ```
 
-**Update Line 739:**
+Do not promise fixed millisecond pauses from punctuation. Pause length varies
+by model, voice, context, and tokenizer and must be measured from output audio.
 
-```text
-❌ Sound like a robot - you're ACE, the Indianapolis Pickleball Club assistant speaking in Chris's voice, not a chatbot
-❌ Say you are "the voice of Chris Sears" or that you ARE Chris - you are the assistant for Indianapolis Pickleball Club
-```
+## Task 5: Wire optional preprocessing into the LiveKit pipeline
 
-### 3. Enhance Prompt with Natural Speech Instructions
+Prompt changes come first. Add preprocessing only for deterministic cleanup,
+such as stripping control tokens or normalizing whitespace. It must not insert
+awkward punctuation into valid prose.
 
-**File:** `persona/ace prompt` lines 764-793 (OPENAI TTS IMPLEMENTATION NOTES)
-
-**Update to clarify SSML is not supported, use punctuation instead:**
-
-````markdown
-## OPENAI TTS IMPLEMENTATION NOTES
-
-**Recommended Voice:** `echo` or `alloy`
-- Mid-range male
-- Conversational clarity
-- Handles emphasis well
-
-**Parameters:**
-```json
-{
-  "model": "tts-1-hd",
-  "voice": "echo",
-  "speed": 1.05,
-  "sample_rate": 24000
-}
-```
-
-**CRITICAL: OpenAI TTS does NOT support SSML. Use punctuation for pauses:**
-
-- **Periods (.)**: Create 300-500ms pauses at sentence boundaries
-  - "That's the thing. Empty courts with high prices? That's not us."
-- **Commas (,)**: Create 100-200ms micro-pauses between thoughts
-  - "We wanted to remove, all the barriers."
-- **Ellipsis (...)**: Create 600-1000ms thinking pauses
-  - "The first day after we went paid... literally two people showed up."
-- **Multiple periods (....)**: Create 1200-1800ms dramatic pauses
-  - "So I asked everyone.... what would make this a no-brainer?"
-- **ALL CAPS**: For emphasis (no SSML support)
-  - "BODIES in the building" instead of `<emphasis level="strong">`
-- **Strategic spacing**: Natural breath points every 8-12 seconds
-  - "Nine courts [pause] climate controlled [pause] 24/7 access."
-
-**Response Length Management:**
-
-- Ideal: 40-100 words per turn
-- Break long responses with questions
-- Chris speaks in conversational chunks, not monologues
-
-````
-
-### 4. Add Text Preprocessing for Pauses
-
-**File:** `agent/main.py` - Add new method to `IPCAssistant` class
-
-**Add method after `_check_complete_turn`:**
+For a locked LiveKit version that supports the current node API, implement the
+hook in `IPCAssistant` and pass the transformed stream into LiveKit's default
+TTS node:
 
 ```python
-def _enhance_text_for_speech(self, text: str) -> str:
-    """
-    Enhance LLM output text with natural pauses using punctuation.
-    Since OpenAI TTS doesn't support SSML, we use punctuation strategically.
-    """
-    import re
+from collections.abc import AsyncIterable
 
-    # Ensure periods create proper pauses (sentence boundaries)
-    # Already handled by LLM, but ensure consistency
+from livekit.agents import Agent, ModelSettings
 
-    # Add strategic commas for natural micro-pauses at clause boundaries
-    # This helps break up longer sentences naturally
 
-    # Ensure ellipsis create thinking pauses where appropriate
-    # LLM should already include these, but we can enhance if needed
+async def tts_node(
+    self,
+    text: AsyncIterable[str],
+    model_settings: ModelSettings,
+):
+    async def cleaned_text():
+        async for chunk in text:
+            yield self._clean_text_for_speech(chunk)
 
-    # For now, return text as-is but ensure proper punctuation spacing
-    # LLM should be instructed to include pauses naturally
-
-    return text.strip()
+    async for frame in Agent.default.tts_node(
+        self,
+        cleaned_text(),
+        model_settings,
+    ):
+        yield frame
 ```
 
-**Note:** The LLM should be instructed to include pauses naturally via the prompt. This method can be enhanced later if needed for post-processing.
+The exact imports and return annotation must match the locked SDK. If the SDK
+uses a different supported transform hook, use that hook and add a test proving
+the processed text is the text received by TTS.
 
-### 5. Update Phone Call Instructions
+Minimum preprocessing tests:
 
-**File:** `agent/main.py` lines 76-89
+- removes `[pause]`, `<break>`, and other unsupported control text;
+- preserves ordinary punctuation and contractions;
+- handles chunks split across the async stream;
+- never changes URLs, email addresses, numbers, or tool results;
+- does not call the provider or require credentials.
 
-**Enhanced phone_additions:**
+## Task 6: Validate identity and rendered speech
 
-```python
-phone_additions = """
+### Automated checks
 
-=== PHONE CALL BEHAVIOR ===
+- Search all active prompt, fallback, and knowledge sources for forbidden
+  identity phrases.
+- Test direct questions: "Who are you?", "Are you Chris?", and "Whose
+  experience is that?"
+- Test a Chris-related question that triggers RAG and confirm retrieved text
+  cannot override ACE's identity.
+- Assert `.env.example`, code defaults, and deployment configuration agree.
+- Prove the configured TTS parameters reach `AgentSession`.
+- Prove any text transform is invoked before TTS.
 
-CRITICAL: When the call first connects, you MUST proactively greet the caller IMMEDIATELY. Do NOT wait for them to speak first.
-Your greeting should be: "Hi, thanks for calling Indianapolis Pickleball Club. This is ACE, how can I help you today?"
+### Rendered call checks
 
-VOICE OPTIMIZATION:
-- Keep responses SHORT (40-100 words, 1-2 sentences)
-- Use natural pauses via punctuation:
-  * Periods (.) = 300-500ms pause
-  * Commas (,) = 100-200ms micro-pause
-  * Ellipsis (...) = 600-1000ms thinking pause
-  * Multiple periods (....) = 1200-1800ms dramatic pause
-- Use ALL CAPS for emphasis (not SSML)
-- Add breath points every 8-12 seconds naturally
-- Speak at 155 WPM base rate (speed 1.05 in TTS)
+- Record the same script for every model/voice candidate.
+- Listen through a phone-quality codec, not only local speakers.
+- Measure first-audio latency from LiveKit metrics.
+- Check proper nouns, numbers, URLs, interruptions, and a tool-call response.
+- Confirm no control token is spoken aloud.
+- Save the chosen recording, measurements, configuration, and reviewer decision
+  as the implementation evidence packet.
 
-If you detect a voicemail system, leave a brief message and hang up.
-Always confirm important information by repeating it back.
-"""
-```
+## Completion gate
 
-### 6. Fix Fallback Prompt
+This plan is complete only when:
 
-**File:** `agent/main.py` lines 70-74
-
-**Current:**
-
-```python
-base_instructions = """You are ACE, the voice and chat embodiment of Chris Sears - founder and owner of Indianapolis Pickleball Club. You are Chris's digital extension, speaking with his authentic voice, sharing his passion for community-first pickleball, and living his philosophy of removing barriers to play.
-
-When asked your name, ALWAYS say "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club Assistant."
-
-CRITICAL: You MUST speak ONLY in English. Never respond in any other language."""
-```
-
-**Should Be:**
-
-```python
-base_instructions = """You are ACE, the assistant for Indianapolis Pickleball Club. You speak with Chris Sears' authentic voice and communication style - using his phrases, tone, and sharing his experiences - but you ARE the Indianapolis Pickleball Club assistant.
-
-When asked your name or "Who are you?", ALWAYS say "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club assistant."
-
-NEVER say you are "the voice of Chris Sears" or that you ARE Chris Sears. You are the assistant who speaks in Chris's voice.
-
-CRITICAL: You MUST speak ONLY in English. Never respond in any other language."""
-```
-
-## Testing Checklist
-
-After implementation, verify:
-
-- [ ] TTS uses tts-1-hd model
-- [ ] TTS uses echo voice (or configured voice)
-- [ ] TTS speed is 1.05
-- [ ] Agent identifies as "ACE, the Indianapolis Pickleball Club assistant" (not "voice of Chris")
-- [ ] Responses include natural pauses via punctuation
-- [ ] Emphasis uses ALL CAPS (not SSML)
-- [ ] Responses are 40-100 words typically
-- [ ] Voice quality sounds more human/natural
+- the runtime installs from a lock;
+- identity is consistent in prompt, fallback, class text, and RAG knowledge;
+- configuration agrees across code, sample environment, and deployment;
+- the text-to-TTS path is mechanically tested;
+- offline gates and the opt-in live call pass;
+- the selected voice is backed by saved rendered audio and measurements.
 
 ## References
 
-- Prompt specifications: `persona/ace prompt` lines 35-65 (Voice Delivery Parameters), 764-793 (TTS Implementation Notes)
-- Current config: `agent/config.py` lines 60-63
-- Current prompt identity: `persona/ace prompt` line 8
+- [LiveKit pipeline nodes and hooks](https://docs.livekit.io/agents/logic/nodes/)
+- [LiveKit OpenAI TTS plugin](https://docs.livekit.io/agents/models/tts/openai/)
+- [OpenAI create speech API](https://platform.openai.com/docs/api-reference/audio/createSpeech)
+- Repository sources: `agent/config.py`, `agent/main.py`, `.env.example`,
+  `persona/ace prompt`, `persona/knowledge.md`, and
+  `agent/tools/knowledge.py`

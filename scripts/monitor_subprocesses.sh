@@ -2,8 +2,7 @@
 # Monitor agent subprocesses and child processes
 # Tracks all processes spawned by the main agent
 
-LOG_FILE="/tmp/agent.log"
-AGENT_PID=$(pgrep -f "python main.py dev" | head -1)
+AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
 
 if [ -z "$AGENT_PID" ]; then
     echo "❌ Agent not running"
@@ -19,16 +18,17 @@ echo ""
 # Function to get child processes
 get_children() {
     local pid=$1
-    ps -o pid,ppid,command --ppid $pid 2>/dev/null | tail -n +2
+    ps -o pid,ppid,command --ppid "$pid" 2>/dev/null | tail -n +2
 }
 
 # Function to get all descendants
 get_all_descendants() {
     local pid=$1
-    local children=$(ps -o pid --ppid $pid -h 2>/dev/null)
+    local children
+    children=$(ps -o pid --ppid "$pid" -h 2>/dev/null)
     echo "$pid"
     for child in $children; do
-        get_all_descendants $child
+        get_all_descendants "$child"
     done
 }
 
@@ -41,24 +41,25 @@ while true; do
     
     # Main process info
     echo "📌 Main Agent Process:"
-    ps -p $AGENT_PID -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2
+    ps -p "$AGENT_PID" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2
     echo ""
     
     # Direct children
     echo "👶 Direct Child Processes:"
-    children=$(get_children $AGENT_PID)
+    children=$(get_children "$AGENT_PID")
     if [ -z "$children" ]; then
         echo "   (none)"
     else
-        ps -p $(echo "$children" | awk '{print $1}') -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2
+        child_pids=$(echo "$children" | awk '{print $1}' | paste -sd, -)
+        ps -p "$child_pids" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2
     fi
     echo ""
     
     # All descendants
     echo "🌳 All Process Tree:"
-    all_pids=$(get_all_descendants $AGENT_PID | sort -u)
+    all_pids=$(get_all_descendants "$AGENT_PID" | sort -u | paste -sd, -)
     if [ -n "$all_pids" ]; then
-        ps -p $all_pids -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2 | head -20
+        ps -p "$all_pids" -o pid,ppid,user,%cpu,%mem,etime,command 2>/dev/null | tail -n +2 | head -20
     else
         echo "   (no subprocesses)"
     fi
@@ -66,12 +67,11 @@ while true; do
     
     # Resource usage summary
     echo "📊 Resource Summary:"
-    total_cpu=$(ps -p $AGENT_PID -o %cpu --no-headers 2>/dev/null | awk '{sum+=$1} END {print sum}')
-    total_mem=$(ps -p $AGENT_PID -o %mem --no-headers 2>/dev/null | awk '{sum+=$1} END {print sum}')
+    total_cpu=$(ps -p "$AGENT_PID" -o %cpu --no-headers 2>/dev/null | awk '{sum+=$1} END {print sum}')
+    total_mem=$(ps -p "$AGENT_PID" -o %mem --no-headers 2>/dev/null | awk '{sum+=$1} END {print sum}')
     echo "   CPU: ${total_cpu:-0}% | Memory: ${total_mem:-0}%"
     echo ""
     
     echo "Refreshing in 2 seconds... (Ctrl+C to stop)"
     sleep 2
 done
-

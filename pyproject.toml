@@ -1,0 +1,51 @@
+[project]
+name = "aceone"
+version = "0.1.0"
+description = "Indianapolis Pickleball Club LiveKit voice agent"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+  "aiohttp==3.14.1",
+  "aiosqlite==0.22.1",
+  "asyncpg==0.31.0",
+  "httpx==0.28.1",
+  "jsonschema==4.26.0",
+  "livekit-agents==1.6.5",
+  "livekit-api==1.2.0",
+  "livekit-plugins-openai==1.6.5",
+  "livekit-plugins-silero==1.6.5",
+  "numpy==2.5.1",
+  "openai==2.45.0",
+  "prometheus-client==0.25.0",
+  "pydantic==2.13.4",
+  "python-dateutil==2.9.0.post0",
+  "python-dotenv==1.2.2",
+  "python-json-logger==4.1.0",
+]
+
+[dependency-groups]
+dev = [
+  "mypy==2.3.0",
+  "pip-audit==2.10.1",
+  "pytest==9.1.1",
+  "pytest-asyncio==1.4.0",
+  "pytest-mock==3.15.1",
+  "ruff==0.15.21",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+
+[tool.ruff.lint.per-file-ignores]
+"agent/main.py" = ["E402"]
+"agent/tools/test_knowledge.py" = ["E402"]
+"test_knowledge_standalone.py" = ["E402"]
+
+[tool.uv]
+# LiveKit 1.6.5 pins the vulnerable 0.59.10 build. The compatible fixed
+# release is covered by the repository's import, unit, and construction gates.
+override-dependencies = ["json-repair==0.60.1"]

@@ -69,11 +69,13 @@ class KnowledgeBase:
                 if current_chunk:
                     chunk_text = "\n".join(current_chunk).strip()
                     if chunk_text:
-                        chunks.append({
-                            "section": current_section,
-                            "text": chunk_text,
-                            "level": current_level
-                        })
+                        chunks.append(
+                            {
+                                "section": current_section,
+                                "text": chunk_text,
+                                "level": current_level,
+                            }
+                        )
 
                 # Start new section
                 header_text = header_match.group(2).strip()
@@ -89,35 +91,41 @@ class KnowledgeBase:
         if current_chunk:
             chunk_text = "\n".join(current_chunk).strip()
             if chunk_text:
-                chunks.append({
-                    "section": current_section,
-                    "text": chunk_text,
-                    "level": current_level
-                })
+                chunks.append(
+                    {
+                        "section": current_section,
+                        "text": chunk_text,
+                        "level": current_level,
+                    }
+                )
 
         # Further split large chunks (if > 10 lines, split by bullet points or paragraphs)
         refined_chunks = []
         for chunk in chunks:
             text = chunk["text"]
             lines = text.split("\n")
-            
+
             if len(lines) > 10:
                 # Split by double newlines (paragraphs) or bullet points
                 paragraphs = re.split(r"\n\s*\n", text)
                 for para in paragraphs:
                     para = para.strip()
                     if para and len(para) > 50:  # Only include substantial paragraphs
-                        refined_chunks.append({
-                            "section": chunk["section"],
-                            "text": para,
-                            "level": chunk["level"]
-                        })
+                        refined_chunks.append(
+                            {
+                                "section": chunk["section"],
+                                "text": para,
+                                "level": chunk["level"],
+                            }
+                        )
             else:
                 refined_chunks.append(chunk)
 
         return refined_chunks
 
-    async def _generate_embeddings(self, chunks: List[Dict[str, str]]) -> List[Dict[str, Any]]:
+    async def _generate_embeddings(
+        self, chunks: List[Dict[str, str]]
+    ) -> List[Dict[str, Any]]:
         """Generate embeddings for all chunks using OpenAI"""
         client = get_openai_client()
         chunks_with_embeddings = []
@@ -127,24 +135,25 @@ class KnowledgeBase:
         # Process in batches to avoid rate limits
         batch_size = 10
         for i in range(0, len(chunks), batch_size):
-            batch = chunks[i:i + batch_size]
+            batch = chunks[i : i + batch_size]
             texts = [chunk["text"] for chunk in batch]
 
             try:
                 response = await client.embeddings.create(
-                    model="text-embedding-3-small",
-                    input=texts
+                    model="text-embedding-3-small", input=texts
                 )
 
                 for j, embedding_obj in enumerate(response.data):
-                    chunks_with_embeddings.append({
-                        "section": batch[j]["section"],
-                        "text": batch[j]["text"],
-                        "level": batch[j]["level"],
-                        "embedding": embedding_obj.embedding
-                    })
+                    chunks_with_embeddings.append(
+                        {
+                            "section": batch[j]["section"],
+                            "text": batch[j]["text"],
+                            "level": batch[j]["level"],
+                            "embedding": embedding_obj.embedding,
+                        }
+                    )
 
-                logger.debug(f"Generated embeddings for batch {i//batch_size + 1}")
+                logger.debug(f"Generated embeddings for batch {i // batch_size + 1}")
 
             except Exception as e:
                 logger.error(f"Error generating embeddings for batch: {e}")
@@ -177,21 +186,22 @@ class KnowledgeBase:
         """Calculate cosine similarity between two vectors (legacy method, use _cosine_similarity_fast)"""
         vec1_array = np.array(vec1)
         vec2_array = np.array(vec2)
-        
+
         dot_product = np.dot(vec1_array, vec2_array)
         norm1 = np.linalg.norm(vec1_array)
         norm2 = np.linalg.norm(vec2_array)
-        
+
         if norm1 == 0 or norm2 == 0:
             return 0.0
-        
+
         return dot_product / (norm1 * norm2)
 
     async def search(self, query: str, top_k: int = 3) -> str:
         """Search knowledge base using semantic similarity - optimized for low latency"""
         import time
+
         start_time = time.time()
-        
+
         if not self._embeddings_loaded:
             await self.load()
 
@@ -204,17 +214,17 @@ class KnowledgeBase:
             client = get_openai_client()
             response = await client.embeddings.create(
                 model="text-embedding-3-small",  # Fast, cost-effective model
-                input=[query]
+                input=[query],
             )
             query_embedding = response.data[0].embedding
             embed_time = time.time() - embed_start
-            logger.debug(f"RAG: Embedding generation took {embed_time*1000:.1f}ms")
+            logger.debug(f"RAG: Embedding generation took {embed_time * 1000:.1f}ms")
 
             # Calculate similarities (vectorized for speed)
             search_start = time.time()
             similarities = []
             query_vec = np.array(query_embedding)
-            
+
             # Use numpy for faster vector operations
             for chunk in self.chunks:
                 chunk_vec = np.array(chunk["embedding"])
@@ -225,12 +235,14 @@ class KnowledgeBase:
             similarities.sort(key=lambda x: x[0], reverse=True)
             top_results = similarities[:top_k]
             search_time = time.time() - search_start
-            logger.debug(f"RAG: Similarity search took {search_time*1000:.1f}ms")
+            logger.debug(f"RAG: Similarity search took {search_time * 1000:.1f}ms")
 
             # Format results
             if not top_results or top_results[0][0] < 0.3:  # Low similarity threshold
                 total_time = time.time() - start_time
-                logger.debug(f"RAG: No results found (total: {total_time*1000:.1f}ms)")
+                logger.debug(
+                    f"RAG: No results found (total: {total_time * 1000:.1f}ms)"
+                )
                 return "I couldn't find relevant information about that topic."
 
             results = []
@@ -238,24 +250,28 @@ class KnowledgeBase:
                 results.append(f"[{chunk['section']}]\n{chunk['text']}")
 
             total_time = time.time() - start_time
-            logger.info(f"RAG: Found {len(top_results)} results in {total_time*1000:.1f}ms (embed: {embed_time*1000:.1f}ms, search: {search_time*1000:.1f}ms)")
-            
+            logger.info(
+                f"RAG: Found {len(top_results)} results in {total_time * 1000:.1f}ms (embed: {embed_time * 1000:.1f}ms, search: {search_time * 1000:.1f}ms)"
+            )
+
             return "\n\n---\n\n".join(results)
 
         except Exception as e:
             total_time = time.time() - start_time
-            logger.error(f"RAG: Error searching knowledge base (took {total_time*1000:.1f}ms): {e}")
+            logger.error(
+                f"RAG: Error searching knowledge base (took {total_time * 1000:.1f}ms): {e}"
+            )
             return f"Error searching knowledge base: {str(e)}"
-    
+
     def _cosine_similarity_fast(self, vec1: np.ndarray, vec2: np.ndarray) -> float:
         """Fast cosine similarity using numpy (optimized version)"""
         dot_product = np.dot(vec1, vec2)
         norm1 = np.linalg.norm(vec1)
         norm2 = np.linalg.norm(vec2)
-        
+
         if norm1 == 0 or norm2 == 0:
             return 0.0
-        
+
         return dot_product / (norm1 * norm2)
 
 
@@ -284,17 +300,12 @@ async def _preload_knowledge_base():
 
 # Start preloading in background (non-blocking)
 try:
-    import asyncio
-    loop = asyncio.get_event_loop()
-    if loop.is_running():
-        # If loop is already running, create task
-        _load_task = asyncio.create_task(_preload_knowledge_base())
-    else:
-        # If no loop running, will load on first access
-        pass
-except (RuntimeError, AttributeError):
-    # No event loop available, will load on demand
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    # Module imported outside an async runtime; load on first use.
     pass
+else:
+    _load_task = loop.create_task(_preload_knowledge_base())
 
 
 # Function tool for LLM to call
@@ -304,13 +315,12 @@ except (RuntimeError, AttributeError):
 async def query_ipc_knowledge(query: str) -> str:
     """
     Search the IPC knowledge base for information.
-    
+
     Args:
         query: The question or topic to search for (e.g., "what are your hours?", "membership pricing")
-    
+
     Returns:
         Relevant information from the knowledge base
     """
     kb = get_knowledge_base()
     return await kb.search(query, top_k=3)
-

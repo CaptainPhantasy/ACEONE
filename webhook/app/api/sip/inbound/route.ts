@@ -4,12 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import {
   AccessToken,
   RoomServiceClient,
-  AgentClient,
-  CreateRoomOptions,
-  CreateAgentDispatchOptions
+  AgentDispatchClient,
 } from "livekit-server-sdk";
 import { z } from "zod";
 
@@ -19,24 +18,32 @@ const envSchema = z.object({
   LK_API_KEY: z.string().min(1),
   LK_API_SECRET: z.string().min(1),
   AGENT_NAME: z.string().default("claudevoice-agent"),
-  WEBHOOK_SECRET: z.string().optional(),
+  WEBHOOK_SECRET: z.string().min(32),
 });
 
-// Validate environment on startup
-const env = envSchema.parse(process.env);
+class ConfigurationError extends Error {}
 
-// Initialize LiveKit clients
-const roomService = new RoomServiceClient(
-  env.LK_URL,
-  env.LK_API_KEY,
-  env.LK_API_SECRET
-);
+function getServices() {
+  const parsed = envSchema.safeParse(process.env);
+  if (!parsed.success) {
+    throw new ConfigurationError("Webhook environment is incomplete or invalid");
+  }
 
-const agentClient = new AgentClient(
-  env.LK_URL,
-  env.LK_API_KEY,
-  env.LK_API_SECRET
-);
+  const env = parsed.data;
+  return {
+    env,
+    roomService: new RoomServiceClient(
+      env.LK_URL,
+      env.LK_API_KEY,
+      env.LK_API_SECRET,
+    ),
+    agentClient: new AgentDispatchClient(
+      env.LK_URL,
+      env.LK_API_KEY,
+      env.LK_API_SECRET,
+    ),
+  };
+}
 
 // Request body schema
 const sipRequestSchema = z.object({
@@ -44,7 +51,7 @@ const sipRequestSchema = z.object({
   to: z.string(),
   callId: z.string().optional(),
   trunkId: z.string().optional(),
-  metadata: z.record(z.string()).optional(),
+  metadata: z.record(z.string(), z.string()).optional(),
 });
 
 // Response types
@@ -70,16 +77,14 @@ function verifyWebhookSignature(
   signature: string | null,
   secret: string
 ): boolean {
-  if (!signature || !secret) return false;
+  if (!signature) return false;
 
-  // Implement HMAC signature verification
-  const crypto = require('crypto');
-  const expectedSignature = crypto
-    .createHmac('sha256', secret)
+  const expectedSignature = createHmac('sha256', secret)
     .update(body)
     .digest('hex');
-
-  return signature === `sha256=${expectedSignature}`;
+  const supplied = Buffer.from(signature);
+  const expected = Buffer.from(`sha256=${expectedSignature}`);
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
 }
 
 /**
@@ -136,18 +141,16 @@ async function logCall(
  */
 export async function POST(req: NextRequest) {
   try {
+    const { env, roomService, agentClient } = getServices();
     const rawBody = await req.text();
 
-    // Verify webhook signature if secret is configured
-    if (env.WEBHOOK_SECRET) {
-      const signature = req.headers.get('x-webhook-signature');
-      if (!verifyWebhookSignature(rawBody, signature, env.WEBHOOK_SECRET)) {
-        console.error('Invalid webhook signature');
-        return NextResponse.json(
-          { reject: { reason: 'Unauthorized', status_code: 401 } } as SIPResponse,
-          { status: 401 }
-        );
-      }
+    const signature = req.headers.get('x-webhook-signature');
+    if (!verifyWebhookSignature(rawBody, signature, env.WEBHOOK_SECRET)) {
+      console.error('Invalid webhook signature');
+      return NextResponse.json(
+        { reject: { reason: 'Unauthorized', status_code: 401 } } as SIPResponse,
+        { status: 401 }
+      );
     }
 
     // Parse and validate request body
@@ -186,7 +189,7 @@ export async function POST(req: NextRequest) {
     };
 
     // Create room options
-    const roomOptions: CreateRoomOptions = {
+    const roomOptions = {
       name: roomName,
       metadata: JSON.stringify(roomMetadata),
       emptyTimeout: 300, // 5 minutes
@@ -222,10 +225,8 @@ export async function POST(req: NextRequest) {
     console.log(`Dispatching agent: ${env.AGENT_NAME}`);
 
     try {
-      await agentClient.createDispatch({
-        agentName: env.AGENT_NAME,
-        room: roomName,
-        metadata: JSON.stringify(agentMetadata)
+      await agentClient.createDispatch(roomName, env.AGENT_NAME, {
+        metadata: JSON.stringify(agentMetadata),
       });
     } catch (error) {
       console.error('Failed to dispatch agent:', error);
@@ -267,7 +268,7 @@ export async function POST(req: NextRequest) {
       canPublishData: true,
     });
 
-    const jwt = token.toJwt();
+    const jwt = await token.toJwt();
 
     console.log(`Call setup complete: ${roomName}`);
     await logCall(from, to, roomName, 'connected');
@@ -292,9 +293,18 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Webhook error:', error);
 
+    if (error instanceof ConfigurationError) {
+      return NextResponse.json({
+        reject: {
+          reason: 'Service is not configured',
+          status_code: 503
+        }
+      } as SIPResponse, { status: 503 });
+    }
+
     // Log error details
     if (error instanceof z.ZodError) {
-      console.error('Validation error:', error.errors);
+      console.error('Validation error:', error.issues);
       return NextResponse.json({
         reject: {
           reason: 'Invalid request',
@@ -316,8 +326,9 @@ export async function POST(req: NextRequest) {
 /**
  * GET handler for health check
  */
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
+    const { env, roomService } = getServices();
     // Test LiveKit connection
     const rooms = await roomService.listRooms();
 
@@ -344,7 +355,7 @@ export async function GET(req: NextRequest) {
 /**
  * Handle other HTTP methods
  */
-export async function OPTIONS(req: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {

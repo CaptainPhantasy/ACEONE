@@ -3,7 +3,6 @@
 # Run in separate terminals or use tmux/screen
 
 LOG_FILE="/tmp/agent.log"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 echo "🔍 ACE Agent - Comprehensive Monitoring"
 echo "======================================"
@@ -16,7 +15,7 @@ echo "Press Ctrl+C to stop"
 echo ""
 
 # Check if agent is running
-AGENT_PID=$(pgrep -f "python main.py dev" | head -1)
+AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
 if [ -z "$AGENT_PID" ]; then
     echo "⚠️  Warning: Agent process not found"
     echo "   Start agent with: ./run.sh"
@@ -50,7 +49,7 @@ LOG_MONITOR_PID=$!
 cleanup() {
     echo ""
     echo "🛑 Stopping monitors..."
-    kill $LOG_MONITOR_PID 2>/dev/null
+    kill "$LOG_MONITOR_PID" 2>/dev/null
     exit 0
 }
 
@@ -69,14 +68,13 @@ while true; do
     sleep 10
     if [ -n "$AGENT_PID" ]; then
         # Check if agent is still running
-        if ! ps -p $AGENT_PID > /dev/null 2>&1; then
+        if ! ps -p "$AGENT_PID" > /dev/null 2>&1; then
             echo ""
             echo "⚠️  Agent process died (PID: $AGENT_PID)"
-            AGENT_PID=$(pgrep -f "python main.py dev" | head -1)
+            AGENT_PID=$(pgrep -f "python -m agent.main dev" | head -1)
             if [ -n "$AGENT_PID" ]; then
                 echo "✅ Found new agent process (PID: $AGENT_PID)"
             fi
         fi
     fi
 done
-

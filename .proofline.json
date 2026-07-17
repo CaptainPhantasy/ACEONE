@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "gates": [
+    {
+      "name": "aceone-voice-and-identity",
+      "command": [
+        "sh",
+        "-c",
+        "uv sync --locked --all-groups && uv run ruff check . && uv run ruff format --check . && uv run pytest -q && uv run python -m compileall -q agent tests && uv run pip-audit && cd webhook && npm ci && npm audit --audit-level=high && npm run build"
+      ],
+      "required": true
+    }
+  ],
+  "include": [
+    ".env.example",
+    ".proofline.json",
+    "agent/config.py",
+    "agent/main.py",
+    "persona/ace prompt",
+    "persona/knowledge.md",
+    "tests/test_agent.py"
+  ],
+  "deny": [
+    ".env",
+    ".env.*",
+    "*.pem",
+    "*.key",
+    "node_modules/**",
+    "**/node_modules/**",
+    ".next/**",
+    "**/.next/**",
+    ".venv/**",
+    "**/__pycache__/**",
+    ".git/**",
+    ".planning/**",
+    ".harness/**",
+    ".pi/**",
+    ".omp/**",
+    ".supercache/**",
+    ".floyd/**",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "FLOYD.md"
+  ],
+  "reviewedDenyOverrides": [
+    ".env.example"
+  ],
+  "baseBranch": "main",
+  "publish": true,
+  "allowLocalRemote": false
+}

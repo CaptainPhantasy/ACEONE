@@ -71,9 +71,10 @@ class Config:
         self.stt_language = os.getenv("STT_LANGUAGE", "en")  # None for auto-detect
 
         # TTS Settings
-        self.tts_model = os.getenv("TTS_MODEL", OpenAITTSModel.TTS_1.value)
-        self.tts_voice = os.getenv("TTS_VOICE", OpenAIVoice.ALLOY.value)
-        self.tts_speed = float(os.getenv("TTS_SPEED", "1.0"))
+        self.tts_model = os.getenv("TTS_MODEL", OpenAITTSModel.TTS_1_HD.value)
+        self.tts_voice = os.getenv("TTS_VOICE", OpenAIVoice.ECHO.value)
+        self.tts_speed = float(os.getenv("TTS_SPEED", "1.05"))
+        self._validate_tts_settings()
 
         # Agent Settings
         self.agent_name = os.getenv("AGENT_NAME", "claudevoice-agent")
@@ -126,6 +127,24 @@ class Config:
             "model": self.tts_model,
             "speed": self.tts_speed,
         }
+
+    def _validate_tts_settings(self) -> None:
+        """Fail fast when the configured OpenAI speech settings are invalid."""
+        supported_models = {model.value for model in OpenAITTSModel}
+        supported_voices = {voice.value for voice in OpenAIVoice}
+
+        if self.tts_model not in supported_models:
+            raise ValueError(
+                f"Unsupported TTS_MODEL {self.tts_model!r}; "
+                f"choose one of {', '.join(sorted(supported_models))}"
+            )
+        if self.tts_voice not in supported_voices:
+            raise ValueError(
+                f"Unsupported TTS_VOICE {self.tts_voice!r}; "
+                f"choose one of {', '.join(sorted(supported_voices))}"
+            )
+        if not 0.25 <= self.tts_speed <= 4.0:
+            raise ValueError("TTS_SPEED must be between 0.25 and 4.0")
 
     def validate(self) -> bool:
         """Validate required configuration"""

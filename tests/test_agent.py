@@ -7,6 +7,7 @@ import asyncio
 import json
 from unittest.mock import Mock, patch, AsyncMock, MagicMock
 from datetime import datetime, timedelta
+from pathlib import Path
 
 # Import agent modules
 import sys
@@ -14,7 +15,9 @@ import os
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from agent.main import ClaudeVoiceAgent, entrypoint
+from livekit.agents import Agent
+
+from agent.main import ClaudeVoiceAgent, IPCAssistant, entrypoint
 from agent.config import Config
 from agent.tools.weather import weather_tool, weather_forecast
 from agent.tools.calendar import calendar_tool, check_availability
@@ -49,6 +52,20 @@ class TestClaudeVoiceAgent:
         assert "You are **ACE**" in instructions
         assert "QUALITY ASSURANCE LITMUS TEST" in instructions
 
+    def test_identity_is_explicit_and_never_impersonates_chris(self):
+        instructions = ClaudeVoiceAgent().get_system_instructions()
+        knowledge = (Path(__file__).parents[1] / "persona" / "knowledge.md").read_text(
+            encoding="utf-8"
+        )
+
+        assert "I'm ACE, the Indianapolis Pickleball Club assistant." in instructions
+        assert "you are not Chris Sears" in instructions
+        assert "voice and chat embodiment" not in instructions
+        assert "YOU embody him" not in instructions
+        assert "you're Chris Sears" not in instructions
+        assert "Chris Sears (Founder/Owner - YOU embody him)" not in knowledge
+        assert "Chris Sears (Founder/Owner)" in knowledge
+
 
 class TestConfig:
     """Test startup configuration boundaries."""
@@ -66,6 +83,50 @@ class TestConfig:
         monkeypatch.delenv("OPENAI_ASSISTANT_ID", raising=False)
 
         assert Config().validate() is True
+
+    def test_quality_voice_defaults(self, monkeypatch):
+        for name in ("TTS_MODEL", "TTS_VOICE", "TTS_SPEED"):
+            monkeypatch.delenv(name, raising=False)
+
+        current = Config()
+
+        assert current.tts_model == "tts-1-hd"
+        assert current.tts_voice == "echo"
+        assert current.tts_speed == 1.05
+
+        env_example = (Path(__file__).parents[1] / ".env.example").read_text(
+            encoding="utf-8"
+        )
+        assert "TTS_MODEL=tts-1-hd" in env_example
+        assert "TTS_VOICE=echo" in env_example
+        assert "TTS_SPEED=1.05" in env_example
+
+    def test_voice_environment_overrides(self, monkeypatch):
+        monkeypatch.setenv("TTS_MODEL", "tts-1")
+        monkeypatch.setenv("TTS_VOICE", "nova")
+        monkeypatch.setenv("TTS_SPEED", "0.9")
+
+        current = Config()
+
+        assert current.tts_model == "tts-1"
+        assert current.tts_voice == "nova"
+        assert current.tts_speed == 0.9
+
+    @pytest.mark.parametrize(
+        ("name", "value", "message"),
+        [
+            ("TTS_MODEL", "not-a-model", "Unsupported TTS_MODEL"),
+            ("TTS_VOICE", "not-a-voice", "Unsupported TTS_VOICE"),
+            ("TTS_SPEED", "4.1", "TTS_SPEED must be between"),
+        ],
+    )
+    def test_invalid_voice_configuration_fails_fast(
+        self, monkeypatch, name, value, message
+    ):
+        monkeypatch.setenv(name, value)
+
+        with pytest.raises(ValueError, match=message):
+            Config()
 
     def test_missing_required_credentials_are_named(self, monkeypatch):
         for name in (
@@ -319,7 +380,7 @@ class TestAgentIntegration:
             patch("agent.main.silero.VAD.load", return_value=Mock()),
             patch("agent.main.openai.STT", return_value=Mock()),
             patch("agent.main.openai.LLM", return_value=Mock()),
-            patch("agent.main.openai.TTS", return_value=Mock()),
+            patch("agent.main.openai.TTS", return_value=Mock()) as mock_tts,
             patch("agent.main.HAS_BACKGROUND_AUDIO", False),
         ):
             mock_assistant.return_value.transcription_node = None
@@ -330,6 +391,66 @@ class TestAgentIntegration:
 
             mock_ctx.connect.assert_awaited_once()
             mock_session.start.assert_awaited_once()
+            mock_tts.assert_called_once_with(
+                model=Config().tts_model,
+                voice=Config().tts_voice,
+                speed=Config().tts_speed,
+            )
+
+
+class TestSpeechTextPipeline:
+    """Prove unsupported controls are removed before LiveKit's default TTS node."""
+
+    def test_cleaner_removes_controls_without_rewriting_content(self):
+        text = (
+            "Email ace@example.com [pause] or visit https://example.com/a?x=1. "
+            "We're open 24/7. <break time=\"500ms\"/>Keep Chris's punctuation."
+        )
+
+        cleaned = IPCAssistant._clean_text_for_speech(text)
+
+        assert "[pause]" not in cleaned
+        assert "<break" not in cleaned
+        assert "ace@example.com" in cleaned
+        assert "https://example.com/a?x=1" in cleaned
+        assert "24/7" in cleaned
+        assert "We're" in cleaned
+        assert "Chris's" in cleaned
+
+    @pytest.mark.asyncio
+    async def test_stream_cleaner_handles_split_control_tokens(self):
+        async def chunks():
+            for chunk in ("Hello [pa", "use] there. <bre", "ak/>Still here."):
+                yield chunk
+
+        cleaned = "".join(
+            [chunk async for chunk in IPCAssistant._clean_speech_stream(chunks())]
+        )
+
+        assert cleaned == "Hello there. Still here."
+
+    @pytest.mark.asyncio
+    async def test_tts_node_passes_cleaned_text_to_livekit_default(self, monkeypatch):
+        captured = []
+
+        async def source():
+            yield "Nine courts [bre"
+            yield "ath] open 24/7."
+
+        def fake_default_tts(_agent, text, _settings):
+            async def frames():
+                captured.extend([chunk async for chunk in text])
+                yield "audio-frame"
+
+            return frames()
+
+        monkeypatch.setattr(Agent.default, "tts_node", fake_default_tts)
+        assistant = object.__new__(IPCAssistant)
+
+        frames = [frame async for frame in assistant.tts_node(source(), object())]
+
+        assert frames == ["audio-frame"]
+        assert "".join(captured) == "Nine courts open 24/7."
 
 
 class TestEndToEnd:

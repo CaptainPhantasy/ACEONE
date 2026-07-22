@@ -5,7 +5,10 @@ Built with LiveKit Agents Framework
 """
 
 import asyncio
+import inspect
 import logging
+import re
+from collections.abc import AsyncIterable
 from pathlib import Path
 
 from livekit.agents import (
@@ -14,6 +17,7 @@ from livekit.agents import (
     WorkerOptions,
     cli,
     llm,
+    ModelSettings,
 )
 from livekit.agents.voice import Agent, AgentSession
 from livekit.agents import metrics
@@ -67,9 +71,9 @@ class ClaudeVoiceAgent:
             logger.warning(
                 f"ACE prompt file not found at {ace_prompt_path}, using minimal prompt"
             )
-            base_instructions = """You are ACE, the voice and chat embodiment of Chris Sears - founder and owner of Indianapolis Pickleball Club. You are Chris's digital extension, speaking with his authentic voice, sharing his passion for community-first pickleball, and living his philosophy of removing barriers to play.
+            base_instructions = """You are ACE, the Indianapolis Pickleball Club assistant. You use Chris Sears' approved communication style and may share clearly attributed IPC stories, but you are not Chris Sears and must never claim to be his literal voice.
 
-When asked your name, ALWAYS say "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club Assistant."
+When asked who or what you are, say "I'm ACE" or "I'm ACE, the Indianapolis Pickleball Club assistant." Attribute Chris's experiences to Chris; never narrate them as your own.
 
 CRITICAL: You MUST speak ONLY in English. Never respond in any other language."""
 
@@ -83,6 +87,8 @@ CRITICAL: When the call first connects, you MUST proactively greet the caller IM
 Your greeting should be: "Hi, thanks for calling Indianapolis Pickleball Club. This is ACE, how can I help you today?"
 
 VOICE OPTIMIZATION: Keep responses SHORT (1-2 sentences). Be conversational, not verbose. Speak naturally at 155 WPM.
+Prefer ordinary punctuation and contractions. Use an occasional ellipsis only for a natural thinking pause.
+Never output SSML, XML, bracketed pause tokens, or repeated-period controls. Ask one clear follow-up question instead of delivering a monologue.
 If you detect a voicemail system, leave a brief message and hang up.
 Always confirm important information by repeating it back.
 """
@@ -93,7 +99,77 @@ Always confirm important information by repeating it back.
 
 
 class IPCAssistant(Agent):
-    """IPC-specific agent that embodies Chris Sears and uses RAG for knowledge retrieval"""
+    """IPC-specific ACE assistant with RAG-backed club knowledge."""
+
+    _BRACKETED_SPEECH_CUE = re.compile(
+        r"\[(?:pause|breath|emphasis|dramatic pause|enthusiastic|proud|faster|"
+        r"decisive|slower(?:, emphatic)?|passionate|authentic|frustrated|contrast|"
+        r"direct|professional|simple|conversational|sincere|warm|empathetic|"
+        r"solution-oriented|matter-of-fact|confident|helpful|practical|"
+        r"between-you-and-me tone|emphasized|additional benefit|reassuring|"
+        r"sales energy|respect|credentials|impressed|additional detail|"
+        r"international cred|energetic|direct close|clear|reasoning|fair|"
+        r"late arrival|apologetic|set expectations|clarify|but|the philosophy|"
+        r"membership pitch|immediate empathy|personal|the honest journey|"
+        r"self-aware|honest|the key difference|warmer|the facility promise|"
+        r"addition|detail|reassurance|technical advantage|invitation|playful|"
+        r"emotional|details|participation options|pricing|additional|the why|"
+        r"genuine emotion|community|wordplay|soft call to action|reassure|"
+        r"direct with pride|candid|story|the facility|parking details|specific|"
+        r"action|excited|prize breakdown|format details|important|frequency|"
+        r"social|requirements|options|pitch|value|main equipment|explain how|"
+        r"explain|camera system|cool factor|booking|availability note|"
+        r"after hours|interest check)\]",
+        re.IGNORECASE,
+    )
+    _SPEECH_MARKUP = re.compile(
+        r"</?(?:break|emphasis|prosody|say-as|phoneme)(?:\s+[^<>]*?)?/?>",
+        re.IGNORECASE,
+    )
+
+    @classmethod
+    def _clean_text_for_speech(cls, text: str) -> str:
+        """Remove unsupported speech controls without rewriting spoken content."""
+        cleaned = cls._BRACKETED_SPEECH_CUE.sub("", text)
+        cleaned = cls._SPEECH_MARKUP.sub("", cleaned)
+        return re.sub(r"[ \t]+", " ", cleaned)
+
+    @classmethod
+    async def _clean_speech_stream(cls, text: AsyncIterable[str]) -> AsyncIterable[str]:
+        """Clean streaming text while retaining incomplete markup across chunks."""
+        carry = ""
+        previous_ended_with_space = False
+
+        async for chunk in text:
+            buffered = carry + chunk
+            last_open = max(buffered.rfind("["), buffered.rfind("<"))
+            last_close = max(buffered.rfind("]"), buffered.rfind(">"))
+            split_at = last_open if last_open > last_close else len(buffered)
+            complete, carry = buffered[:split_at], buffered[split_at:]
+            cleaned = cls._clean_text_for_speech(complete)
+            if previous_ended_with_space:
+                cleaned = cleaned.lstrip(" \t")
+            if cleaned:
+                previous_ended_with_space = cleaned.endswith((" ", "\t"))
+                yield cleaned
+
+        cleaned = cls._clean_text_for_speech(carry)
+        if previous_ended_with_space:
+            cleaned = cleaned.lstrip(" \t")
+        if cleaned:
+            yield cleaned
+
+    async def tts_node(self, text: AsyncIterable[str], model_settings: ModelSettings):
+        """Sanitize LLM text before LiveKit passes it to the configured TTS."""
+        result = Agent.default.tts_node(
+            self, self._clean_speech_stream(text), model_settings
+        )
+        if inspect.isawaitable(result):
+            result = await result
+        if result is None:
+            return
+        async for frame in result:
+            yield frame
 
     def __init__(self, instructions: str, tools: list, is_phone_call: bool = False):
         super().__init__(instructions=instructions, tools=tools)

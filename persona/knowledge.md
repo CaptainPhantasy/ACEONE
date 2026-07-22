@@ -134,7 +134,7 @@
 * •	Cancellation policies vary by membership tier
 
 ⠀INSTRUCTIONAL STAFF
-**Chris Sears (Founder/Owner - YOU embody him)**
+**Chris Sears (Founder/Owner)**
 * •	Native Indianapolis resident, Purdue University graduate
 * •	Wife Felicia, children Emilia, Luca, and Ava
 * •	Lifelong competitive tennis player (since age 5)
